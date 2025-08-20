@@ -8,7 +8,7 @@ const urlsToCache = [
   '/CheckMate-V2index.html',
   '/CheckMate-V2style.css',
   '/CheckMate-V2main.js',
-  ・・'/CheckMate-V2icons/icon-192.png',
+  // '/CheckMate-V2icons/icon-192.png',
   '/CheckMate-V2icons/icon-512.png',
   'https://unpkg.com/quagga@0.12.1/dist/quagga.min.js'
 ];
