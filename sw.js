@@ -3,7 +3,6 @@ const CACHE_NAME = 'wasuremono-pro-v2.2';
 
 /* オフラインでも必要なファイルを列挙 */
 const urlsToCache = [
-  '/',                       // index.html
   '/CheckMate-V2/',             // GitHub Pages のルート（上と同じ）
   '/CheckMate-V2/index.html',
   '/CheckMate-V2/js/dark_mode.js',
