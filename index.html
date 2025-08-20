@@ -1,952 +1,1627 @@
-// Disnana Command Reference Script - Filter + Search Integration
-
-let categoryConfig = {};
-let allCommands = [];
-let searchMode = 'name';
-let searchTimeout = null;
-let currentFilter = 'all'; // 現在のフィルタ状態を保持
-
-function getElements() {
-    return {
-        commandsContainer: document.getElementById('commandsContainer'),
-        commandsContainerMobile: document.getElementById('commandsContainerMobile'),
-        loadingMessage: document.getElementById('loadingMessage'),
-        noResults: document.getElementById('noResults'),
-        searchInput: document.getElementById('searchInput'),
-        commandCount: document.getElementById('commandCount'),
-        filterButtons: document.getElementById('filterButtons'),
-        nameSearchBtn: document.getElementById('nameSearchBtn'),
-        fullSearchBtn: document.getElementById('fullSearchBtn'),
-        expandAllBtn: document.getElementById('expandAllBtn'),
-        collapseAllBtn: document.getElementById('collapseAllBtn')
-    };
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>📚 忘れ物防止システム Pro</title>
+<meta name="theme-color" content="#007bff">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config = {
+  darkMode: 'class',
+  theme: {
+    extend: {
+      colors: {
+        primary: {
+          50: '#eff6ff',
+          500: '#3b82f6',
+          600: '#2563eb',
+          700: '#1d4ed8',
+        }
+      },
+      animation: {
+        'pulse-soft': 'pulse 0.6s ease-in-out',
+      }
+    }
+  }
 }
+</script>
 
-// ========== カード作成（前回と同じ） ==========
-function createDesktopCard(command, index) {
-    const config = categoryConfig[command.category];
-    if (!config) return '';
+<!-- ダークモード初期化スクリプト -->
+<script>
+if (localStorage.getItem('dark-mode') === 'true' || 
+   (!('dark-mode' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+  document.documentElement.classList.add('dark');
+} else {
+  document.documentElement.classList.remove('dark');
+}
+</script>
+
+</head>
+<body class="bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 transition-colors duration-300">
+<div class="max-w-lg mx-auto p-2 sm:p-4">
+
+<!-- ヘッダー -->
+<header class="bg-gradient-to-r from-blue-600 to-blue-700 dark:from-blue-700 dark:to-blue-800 text-white p-4 sm:p-6 rounded-xl text-center mb-4 shadow-lg">
+  <div class="flex justify-between items-center mb-2">
+    <h1 class="text-xl sm:text-2xl font-bold">📚 忘れ物防止システム Pro</h1>
+    <!-- ダークモード切り替えボタン -->
+    <button id="theme-toggle" class="p-2 rounded-lg bg-white/20 hover:bg-white/30 transition-colors duration-200">
+      <svg id="theme-toggle-dark-icon" class="w-5 h-5 hidden" fill="currentColor" viewBox="0 0 20 20">
+        <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"></path>
+      </svg>
+      <svg id="theme-toggle-light-icon" class="w-5 h-5 hidden" fill="currentColor" viewBox="0 0 20 20">
+        <path fill-rule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" clip-rule="evenodd"></path>
+      </svg>
+    </button>
+  </div>
+  <p class="text-blue-100 dark:text-blue-200">教材・持ち物をまとめて管理！</p>
+</header>
+
+<!-- タブナビゲーション -->
+<nav class="flex bg-white dark:bg-gray-800 rounded-lg mb-4 overflow-hidden shadow-md">
+  <button class="tab-btn flex-1 py-3 px-2 text-xs sm:text-sm font-medium transition-all duration-200 bg-blue-600 text-white" data-tab="quick">⚡ クイック</button>
+  <button class="tab-btn flex-1 py-3 px-2 text-xs sm:text-sm font-medium transition-all duration-200 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700" data-tab="scanner">📱 登録</button>
+  <button class="tab-btn flex-1 py-3 px-2 text-xs sm:text-sm font-medium transition-all duration-200 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700" data-tab="items">📋 一覧</button>
+  <button class="tab-btn flex-1 py-3 px-2 text-xs sm:text-sm font-medium transition-all duration-200 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700" data-tab="check">✅ チェック</button>
+  <button class="tab-btn flex-1 py-3 px-2 text-xs sm:text-sm font-medium transition-all duration-200 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700" data-tab="settings">⚙️ 設定</button>
+</nav>
+
+<!-- クイックアクセスタブ -->
+<div id="quick" class="tab-content">
+  <div class="grid grid-cols-3 gap-2 sm:gap-4 mb-4">
+    <div class="bg-white dark:bg-gray-800 rounded-xl p-3 sm:p-4 text-center shadow-md">
+      <div class="text-2xl sm:text-3xl font-bold text-blue-600 dark:text-blue-400" id="total-items">0</div>
+      <div class="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mt-1">総アイテム</div>
+    </div>
+    <div class="bg-white dark:bg-gray-800 rounded-xl p-3 sm:p-4 text-center shadow-md">
+      <div class="text-2xl sm:text-3xl font-bold text-green-600 dark:text-green-400" id="checked-items">0</div>
+      <div class="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mt-1">チェック済</div>
+    </div>
+    <div class="bg-white dark:bg-gray-800 rounded-xl p-3 sm:p-4 text-center shadow-md">
+      <div class="text-2xl sm:text-3xl font-bold text-purple-600 dark:text-purple-400" id="today-items">0</div>
+      <div class="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mt-1">今日の予定</div>
+    </div>
+  </div>
+
+  <div class="bg-white dark:bg-gray-800 rounded-xl p-4 sm:p-6 mb-4 shadow-md">
+    <h3 class="text-lg font-semibold mb-4 flex items-center"><span class="mr-2">🚀</span>クイック追加</h3>
+    <div class="flex gap-2 mb-3">
+      <input type="text" id="quick-name" placeholder="アイテム名を入力" class="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white text-base">
+      <button id="quick-add" class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors duration-200 whitespace-nowrap">➕ 追加</button>
+    </div>
+    <div class="flex gap-2 items-center">
+      <select id="quick-category" class="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white">
+        <option value="教材">📚 教材</option>
+        <option value="文房具">✏️ 文房具</option>
+        <option value="体育用品">⚽ 体育用品</option>
+        <option value="弁当・水筒">🍱 弁当・水筒</option>
+        <option value="その他">📦 その他</option>
+      </select>
+      <button id="quick-scan" class="px-3 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg font-medium transition-colors duration-200 text-sm">📷 スキャン追加</button>
+    </div>
+  </div>
+
+  <div class="bg-white dark:bg-gray-800 rounded-xl p-4 sm:p-6 shadow-md">
+    <h3 class="text-lg font-semibold mb-4 flex items-center"><span class="mr-2">📅</span>今日のチェックリスト</h3>
+    <ul id="today-checklist" class="space-y-2"></ul>
+  </div>
+</div>
+
+<!-- スキャンタブ（登録用） -->
+<div id="scanner" class="tab-content hidden">
+  <div class="bg-white dark:bg-gray-800 rounded-xl p-4 sm:p-6 mb-4 shadow-md">
+    <div id="viewport" class="relative w-full h-64 border-2 border-blue-600 dark:border-blue-400 rounded-xl overflow-hidden bg-black mb-4">
+      <div class="guide absolute top-[20%] left-[15%] right-[15%] bottom-[20%] border-4 border-dashed border-green-400 bg-green-400/10 pointer-events-none rounded-lg"></div>
+    </div>
+    <div id="status" class="p-3 rounded-lg mb-4 text-center font-medium bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-700">📷 準備完了 - スキャン開始ボタンを押してください</div>
+    <div class="text-center">
+      <button id="scan-btn" class="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold transition-colors duration-200 mr-2">🚀 スキャン開始</button>
+      <button id="stop-btn" class="px-6 py-3 bg-gray-600 text-white rounded-lg font-semibold transition-colors duration-200 disabled:bg-gray-400 disabled:cursor-not-allowed" disabled>⏹ 停止</button>
+    </div>
+  </div>
+
+  <div class="bg-white dark:bg-gray-800 rounded-xl p-4 sm:p-6 shadow-md">
+    <h3 class="text-lg font-semibold mb-4 flex items-center"><span class="mr-2">📖</span>詳細登録</h3>
     
-    const wrapperId = `desktop_wrapper_${index}`;
-    const detailsId = `desktop_details_${index}`;
-    const iconId = `desktop_icon_${index}`;
-    const buttonId = `desktop_button_${index}`;
+    <div class="mb-4">
+      <label class="block text-sm font-medium mb-2">アイテム名 *</label>
+      <input type="text" id="detail-name" placeholder="例: 数学の教科書" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white">
+    </div>
     
-    return `
-        <div id="${wrapperId}" class="command-card-wrapper">
-            <div class="command-card bg-white rounded-lg shadow-md border border-gray-200 hover:shadow-lg" 
-                 data-category="${command.category}" 
-                 data-command="${command.name}">
-                <div class="p-4 border-b border-gray-100">
-                    <div class="flex items-start justify-between">
-                        <div class="flex items-center">
-                            <div class="w-10 h-10 ${config.bgColor} rounded-lg flex items-center justify-center mr-3">
-                                <i class="${config.icon} ${config.textColor} text-lg"></i>
-                            </div>
-                            <div>
-                                <h3 class="font-bold text-lg text-gray-900">${command.name}</h3>
-                                <span class="inline-block px-2 py-1 text-xs font-medium ${config.bgColor} ${config.textColor} rounded-full mt-1">
-                                    ${config.name}
-                                </span>
-                            </div>
-                        </div>
-                        <button class="text-gray-400 hover:text-gray-600 p-2 rounded-md hover:bg-gray-100"
-                                id="${buttonId}">
-                            <i class="fas fa-chevron-down text-sm transition-transform duration-200" 
-                               id="${iconId}" 
-                               style="transform: rotate(0deg);"></i>
-                        </button>
-                    </div>
-                    
-                    <p class="text-gray-700 mt-3 mb-2">${command.description}</p>
-                    
-                    <div class="flex flex-wrap gap-3 text-xs text-gray-500">
-                        <span><i class="fas fa-terminal mr-1"></i>${command.usage}</span>
-                        <span><i class="fas fa-shield-alt mr-1"></i>${command.permissions}</span>
-                        ${command.cooldown ? `<span><i class="fas fa-clock mr-1"></i>${command.cooldown}</span>` : ''}
-                    </div>
-                </div>
-                
-                <div id="${detailsId}" style="display: none; position: relative; width: 100%;">
-                    <div class="p-4 space-y-4">
-                        <div>
-                            <h4 class="font-semibold text-gray-900 mb-2 text-sm">使用例</h4>
-                            <div class="space-y-2">
-                                ${command.examples.map(example => `
-                                    <div class="bg-gray-50 p-2 rounded text-xs">
-                                        <div class="text-gray-600 mb-1">${example.description}:</div>
-                                        <code class="text-green-600 font-mono">${example.command}</code>
-                                    </div>
-                                `).join('')}
-                            </div>
-                        </div>
-                        
-                        ${command.notes && command.notes.length > 0 ? `
-                            <div>
-                                <h4 class="font-semibold text-gray-900 mb-2 text-sm">注意事項・Tips</h4>
-                                <div class="space-y-1">
-                                    ${command.notes.map(note => `
-                                        <div class="text-xs text-gray-600 flex items-start">
-                                            <i class="fas fa-lightbulb ${config.textColor} mr-1 mt-0.5 text-xs"></i>
-                                            <span>${note}</span>
-                                        </div>
-                                    `).join('')}
-                                </div>
-                            </div>
-                        ` : ''}
-                    </div>
-                </div>
-            </div>
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+      <div>
+        <label class="block text-sm font-medium mb-2">カテゴリー</label>
+        <select id="detail-category" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white">
+          <option value="教材">📚 教材</option>
+          <option value="文房具">✏️ 文房具</option>
+          <option value="体育用品">⚽ 体育用品</option>
+          <option value="弁当・水筒">🍱 弁当・水筒</option>
+          <option value="制服・服装">👔 制服・服装</option>
+          <option value="楽器">🎵 楽器</option>
+          <option value="部活用品">🏃 部活用品</option>
+          <option value="その他">📦 その他</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-sm font-medium mb-2">重要度</label>
+        <select id="detail-priority" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white">
+          <option value="普通">普通</option>
+          <option value="重要">⭐ 重要</option>
+          <option value="必須">‼️ 必須</option>
+        </select>
+      </div>
+    </div>
+    
+    <div class="mb-4">
+      <label class="block text-sm font-medium mb-2">バーコード (任意)</label>
+      <input type="text" id="detail-code" placeholder="バーコードまたは独自ID" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white">
+    </div>
+    
+    <div class="mb-4">
+      <label class="block text-sm font-medium mb-2">メモ (任意)</label>
+      <textarea id="detail-memo" rows="2" placeholder="追加情報やメモ" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"></textarea>
+    </div>
+    
+    <div class="mb-6">
+      <label class="block text-sm font-medium mb-2">必要な曜日</label>
+      <div class="grid grid-cols-4 sm:grid-cols-7 gap-2">
+        <label class="flex items-center space-x-1"><input type="checkbox" value="月" class="rounded text-blue-600 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600"> <span class="text-sm">月</span></label>
+        <label class="flex items-center space-x-1"><input type="checkbox" value="火" class="rounded text-blue-600 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600"> <span class="text-sm">火</span></label>
+        <label class="flex items-center space-x-1"><input type="checkbox" value="水" class="rounded text-blue-600 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600"> <span class="text-sm">水</span></label>
+        <label class="flex items-center space-x-1"><input type="checkbox" value="木" class="rounded text-blue-600 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600"> <span class="text-sm">木</span></label>
+        <label class="flex items-center space-x-1"><input type="checkbox" value="金" class="rounded text-blue-600 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600"> <span class="text-sm">金</span></label>
+        <label class="flex items-center space-x-1"><input type="checkbox" value="土" class="rounded text-blue-600 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600"> <span class="text-sm">土</span></label>
+        <label class="flex items-center space-x-1"><input type="checkbox" value="日" class="rounded text-blue-600 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600"> <span class="text-sm">日</span></label>
+      </div>
+    </div>
+    
+    <button id="add-detail" class="w-full py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-semibold transition-colors duration-200">➕ 詳細登録</button>
+  </div>
+</div>
+
+<!-- 一覧タブ -->
+<div id="items" class="tab-content hidden">
+  <div class="bg-white dark:bg-gray-800 rounded-xl p-4 sm:p-6 mb-4 shadow-md">
+    <div class="relative mb-4">
+      <input type="text" id="search-input" placeholder="🔍 アイテムを検索..." class="w-full pl-3 pr-10 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white">
+      <button id="search-clear" class="absolute right-2 top-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 text-lg hidden">×</button>
+    </div>
+    
+    <div class="flex flex-wrap gap-2 mb-4" id="category-tabs">
+      <button class="category-btn px-3 py-1 border-2 border-blue-600 bg-blue-600 text-white rounded-full text-sm font-medium transition-all duration-200" data-category="all">全て</button>
+      <button class="category-btn px-3 py-1 border-2 border-blue-600 text-blue-600 dark:text-blue-400 bg-white dark:bg-gray-800 hover:bg-blue-50 dark:hover:bg-gray-700 rounded-full text-sm font-medium transition-all duration-200" data-category="教材">📚 教材</button>
+      <button class="category-btn px-3 py-1 border-2 border-blue-600 text-blue-600 dark:text-blue-400 bg-white dark:bg-gray-800 hover:bg-blue-50 dark:hover:bg-gray-700 rounded-full text-sm font-medium transition-all duration-200" data-category="文房具">✏️ 文房具</button>
+      <button class="category-btn px-3 py-1 border-2 border-blue-600 text-blue-600 dark:text-blue-400 bg-white dark:bg-gray-800 hover:bg-blue-50 dark:hover:bg-gray-700 rounded-full text-sm font-medium transition-all duration-200" data-category="体育用品">⚽ 体育</button>
+      <button class="category-btn px-3 py-1 border-2 border-blue-600 text-blue-600 dark:text-blue-400 bg-white dark:bg-gray-800 hover:bg-blue-50 dark:hover:bg-gray-700 rounded-full text-sm font-medium transition-all duration-200" data-category="弁当・水筒">🍱 弁当</button>
+      <button class="category-btn px-3 py-1 border-2 border-blue-600 text-blue-600 dark:text-blue-400 bg-white dark:bg-gray-800 hover:bg-blue-50 dark:hover:bg-gray-700 rounded-full text-sm font-medium transition-all duration-200" data-category="その他">📦 他</button>
+    </div>
+  </div>
+
+  <div class="bg-white dark:bg-gray-800 rounded-xl p-4 sm:p-6 shadow-md">
+    <h3 id="items-title" class="text-lg font-semibold mb-4">📚 全アイテム (0件)</h3>
+    <ul id="items-list" class="space-y-3"></ul>
+    <div class="text-center mt-4 space-x-2">
+      <button id="sort-toggle" class="px-3 py-1 bg-gray-600 hover:bg-gray-700 text-white rounded-lg text-sm font-medium transition-colors duration-200">📊 並び替え</button>
+      <button id="clear-items" class="px-3 py-1 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition-colors duration-200">🗑 全削除</button>
+    </div>
+  </div>
+</div>
+
+<!-- チェックタブ -->
+<div id="check" class="tab-content hidden">
+  <div class="bg-white dark:bg-gray-800 rounded-xl p-4 sm:p-6 mb-4 shadow-md">
+    <h3 class="text-lg font-semibold mb-4 flex items-center"><span class="mr-2">✅</span>曜日別チェックリスト</h3>
+    <div class="grid grid-cols-4 sm:grid-cols-7 gap-2 mb-4" id="preset-days">
+      <button class="preset-btn py-2 border-2 border-blue-600 text-blue-600 dark:text-blue-400 bg-white dark:bg-gray-800 hover:bg-blue-50 dark:hover:bg-gray-700 rounded-lg font-medium transition-all duration-200 text-center" data-day="月">月</button>
+      <button class="preset-btn py-2 border-2 border-blue-600 text-blue-600 dark:text-blue-400 bg-white dark:bg-gray-800 hover:bg-blue-50 dark:hover:bg-gray-700 rounded-lg font-medium transition-all duration-200 text-center" data-day="火">火</button>
+      <button class="preset-btn py-2 border-2 border-blue-600 text-blue-600 dark:text-blue-400 bg-white dark:bg-gray-800 hover:bg-blue-50 dark:hover:bg-gray-700 rounded-lg font-medium transition-all duration-200 text-center" data-day="水">水</button>
+      <button class="preset-btn py-2 border-2 border-blue-600 text-blue-600 dark:text-blue-400 bg-white dark:bg-gray-800 hover:bg-blue-50 dark:hover:bg-gray-700 rounded-lg font-medium transition-all duration-200 text-center" data-day="木">木</button>
+      <button class="preset-btn py-2 border-2 border-blue-600 text-blue-600 dark:text-blue-400 bg-white dark:bg-gray-800 hover:bg-blue-50 dark:hover:bg-gray-700 rounded-lg font-medium transition-all duration-200 text-center" data-day="金">金</button>
+      <button class="preset-btn py-2 border-2 border-blue-600 text-blue-600 dark:text-blue-400 bg-white dark:bg-gray-800 hover:bg-blue-50 dark:hover:bg-gray-700 rounded-lg font-medium transition-all duration-200 text-center" data-day="土">土</button>
+      <button class="preset-btn py-2 border-2 border-blue-600 text-blue-600 dark:text-blue-400 bg-white dark:bg-gray-800 hover:bg-blue-50 dark:hover:bg-gray-700 rounded-lg font-medium transition-all duration-200 text-center" data-day="日">日</button>
+    </div>
+  </div>
+
+  <div class="bg-white dark:bg-gray-800 rounded-xl p-4 sm:p-6 shadow-md">
+    <h3 class="text-lg font-semibold mb-4 flex items-center"><span class="mr-2">📷</span>チェック方法選択</h3>
+    <div class="flex bg-gray-100 dark:bg-gray-700 rounded-lg mb-4 overflow-hidden border border-gray-300 dark:border-gray-600">
+      <button class="scan-mode-btn flex-1 py-2 px-4 font-medium transition-all duration-200 bg-blue-600 text-white" data-mode="manual">✋ 手動チェック</button>
+      <button class="scan-mode-btn flex-1 py-2 px-4 font-medium transition-all duration-200 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600" data-mode="scan">📱 スキャンチェック</button>
+    </div>
+
+    <!-- 手動チェックモード -->
+    <div id="manual-check-mode">
+      <div id="check-progress" class="text-center my-4 font-semibold"></div>
+      <ul id="checklist" class="space-y-3"></ul>
+      <div class="text-center mt-4 space-x-2">
+        <button id="check-all" class="px-3 py-1 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium transition-colors duration-200">✅ 全選択</button>
+        <button id="uncheck-all" class="px-3 py-1 bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg text-sm font-medium transition-colors duration-200">⭕ 全解除</button>
+        <button id="reset-check" class="px-3 py-1 bg-gray-600 hover:bg-gray-700 text-white rounded-lg text-sm font-medium transition-colors duration-200">🔄 リセット</button>
+      </div>
+    </div>
+
+    <!-- スキャンチェックモード -->
+    <div id="scan-check-mode" class="hidden">
+      <div id="check-viewport" class="relative w-full h-64 border-2 border-blue-600 dark:border-blue-400 rounded-xl overflow-hidden bg-black mb-4">
+        <div class="guide absolute top-[20%] left-[15%] right-[15%] bottom-[20%] border-4 border-dashed border-green-400 bg-green-400/10 pointer-events-none rounded-lg"></div>
+      </div>
+      <div id="check-status" class="p-3 rounded-lg mb-4 text-center font-medium bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-700">📷 バーコードを読み取って自動チェック</div>
+      <div class="text-center mb-4">
+        <button id="check-scan-btn" class="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold transition-colors duration-200 mr-2">🚀 スキャン開始</button>
+        <button id="check-stop-btn" class="px-6 py-3 bg-gray-600 text-white rounded-lg font-semibold transition-colors duration-200 disabled:bg-gray-400 disabled:cursor-not-allowed" disabled>⏹ 停止</button>
+      </div>
+      <div id="check-result" class="check-result hidden p-4 rounded-lg mb-4 text-center font-semibold"></div>
+
+      <!-- スキャンモードでも共通のチェック状況表示 -->
+      <div class="mt-4">
+        <div id="scan-check-progress" class="text-center my-4 font-semibold"></div>
+        <ul id="scan-checklist" class="space-y-3"></ul>
+        <div class="text-center mt-4 space-x-2">
+          <button id="scan-check-all" class="px-3 py-1 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium transition-colors duration-200">✅ 全選択</button>
+          <button id="scan-uncheck-all" class="px-3 py-1 bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg text-sm font-medium transition-colors duration-200">⭕ 全解除</button>
+          <button id="scan-reset-check" class="px-3 py-1 bg-gray-600 hover:bg-gray-700 text-white rounded-lg text-sm font-medium transition-colors duration-200">🔄 リセット</button>
         </div>
-    `;
-}
+      </div>
 
-function createMobileCard(command, index) {
-    const config = categoryConfig[command.category];
-    if (!config) return '';
+      <div class="mt-8">
+        <h4 class="text-lg font-semibold mb-3">📊 スキャン結果</h4>
+        <ul id="scan-results" class="space-y-2"></ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 設定タブ -->
+<div id="settings" class="tab-content hidden">
+  <div class="bg-white dark:bg-gray-800 rounded-xl p-4 sm:p-6 mb-4 shadow-md">
+    <h3 class="text-lg font-semibold mb-4 flex items-center"><span class="mr-2">📊</span>統計情報</h3>
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4" id="detailed-stats">
+      <div class="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/30 dark:to-blue-800/30 rounded-xl p-4 text-center">
+        <div class="text-2xl font-bold text-blue-600 dark:text-blue-400" id="stat-total">0</div>
+        <div class="text-xs text-gray-600 dark:text-gray-400 mt-1">総アイテム数</div>
+      </div>
+      <div class="bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/30 dark:to-green-800/30 rounded-xl p-4 text-center">
+        <div class="text-2xl font-bold text-green-600 dark:text-green-400" id="stat-categories">0</div>
+        <div class="text-xs text-gray-600 dark:text-gray-400 mt-1">カテゴリー数</div>
+      </div>
+      <div class="bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-900/30 dark:to-purple-800/30 rounded-xl p-4 text-center">
+        <div class="text-2xl font-bold text-purple-600 dark:text-purple-400" id="stat-barcodes">0</div>
+        <div class="text-xs text-gray-600 dark:text-gray-400 mt-1">バーコード付き</div>
+      </div>
+      <div class="bg-gradient-to-br from-orange-50 to-orange-100 dark:from-orange-900/30 dark:to-orange-800/30 rounded-xl p-4 text-center">
+        <div class="text-2xl font-bold text-orange-600 dark:text-orange-400" id="stat-completion">0%</div>
+        <div class="text-xs text-gray-600 dark:text-gray-400 mt-1">完了率</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="bg-white dark:bg-gray-800 rounded-xl p-4 sm:p-6 mb-4 shadow-md">
+    <h3 class="text-lg font-semibold mb-4 flex items-center"><span class="mr-2">⚙️</span>データ管理</h3>
+    <div class="grid grid-cols-2 gap-2 mb-4">
+      <button id="export-btn" class="py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors duration-200">⬇ エクスポート</button>
+      <label for="import-file" class="py-3 bg-gray-600 hover:bg-gray-700 text-white rounded-lg font-medium transition-colors duration-200 cursor-pointer text-center flex items-center justify-center">⬆ インポート</label>
+    </div>
+    <input type="file" id="import-file" class="hidden" accept="application/json">
+    <div class="grid grid-cols-2 gap-2">
+      <button id="backup-btn" class="py-3 bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg font-medium transition-colors duration-200">💾 バックアップ</button>
+      <button id="restore-btn" class="py-3 bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg font-medium transition-colors duration-200">🔄 復元</button>
+    </div>
+    <div id="status-msg" class="mt-4 text-center font-semibold"></div>
+  </div>
+
+  <div class="bg-white dark:bg-gray-800 rounded-xl p-4 sm:p-6 shadow-md">
+    <h3 class="text-lg font-semibold mb-4 flex items-center"><span class="mr-2">📱</span>PWA情報</h3>
+    <p class="text-gray-600 dark:text-gray-400 mb-3">このアプリはPWA対応で以下の機能があります：</p>
+    <ul class="list-disc list-inside text-gray-600 dark:text-gray-400 space-y-1 mb-4">
+      <li>オフライン動作</li>
+      <li>ホーム画面追加</li>
+      <li>データ永続保存</li>
+      <li>バーコードチェック</li>
+    </ul>
+    <button id="install-pwa" class="w-full py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-semibold transition-colors duration-200 hidden">📱 ホーム画面に追加</button>
+  </div>
+</div>
+
+<!-- 編集モーダル -->
+<div id="edit-modal" class="fixed inset-0 bg-black/50 z-50 flex justify-center items-center hidden">
+  <div class="bg-white dark:bg-gray-800 rounded-xl p-6 max-w-md w-[90%] max-h-[80vh] overflow-y-auto">
+    <div class="flex justify-between items-center mb-4">
+      <h3 class="text-lg font-semibold">✏️ アイテム編集</h3>
+      <button class="text-2xl hover:text-gray-600 dark:hover:text-gray-400 transition-colors" onclick="closeEditModal()">×</button>
+    </div>
     
-    const wrapperId = `mobile_wrapper_${index}`;
-    const detailsId = `mobile_details_${index}`;
-    const iconId = `mobile_icon_${index}`;
-    const buttonId = `mobile_button_${index}`;
-    
-    return `
-        <div id="${wrapperId}" class="command-card-wrapper">
-            <div class="command-card bg-white rounded-lg shadow-md border border-gray-200" 
-                 data-category="${command.category}" 
-                 data-command="${command.name}">
-                <div class="p-3">
-                    <div class="flex items-center justify-between mb-2">
-                        <div class="flex items-center">
-                            <div class="w-8 h-8 ${config.bgColor} rounded-md flex items-center justify-center mr-2">
-                                <i class="${config.icon} ${config.textColor} text-sm"></i>
-                            </div>
-                            <div>
-                                <h3 class="font-bold text-base text-gray-900">${command.name}</h3>
-                                <span class="inline-block px-1.5 py-0.5 text-xs font-medium ${config.bgColor} ${config.textColor} rounded">
-                                    ${config.name}
-                                </span>
-                            </div>
-                        </div>
-                        <button class="text-gray-400 hover:text-gray-600 p-2 rounded-md hover:bg-gray-100"
-                                id="${buttonId}">
-                            <i class="fas fa-chevron-down text-xs transition-transform duration-200" 
-                               id="${iconId}"
-                               style="transform: rotate(0deg);"></i>
-                        </button>
-                    </div>
-                    
-                    <p class="text-gray-700 text-sm mb-2">${command.description}</p>
-                    
-                    <div class="text-xs text-gray-500 space-y-1">
-                        <div><i class="fas fa-terminal mr-1 w-3"></i>${command.usage}</div>
-                        <div><i class="fas fa-shield-alt mr-1 w-3"></i>${command.permissions}</div>
-                    </div>
-                </div>
-                
-                <div id="${detailsId}" style="display: none; position: relative; width: 100%;">
-                    <div class="px-3 pb-3 border-t border-gray-100">
-                        <div class="pt-3 space-y-3">
-                            <div>
-                                <h4 class="font-semibold text-gray-900 mb-1 text-sm">使用例</h4>
-                                <div class="space-y-1">
-                                    ${command.examples.slice(0, 2).map(example => `
-                                        <div class="bg-gray-50 p-2 rounded text-xs">
-                                            <div class="text-gray-600 mb-1">${example.description}</div>
-                                            <code class="text-green-600 font-mono">${example.command}</code>
-                                        </div>
-                                    `).join('')}
-                                </div>
-                            </div>
-                            
-                            ${command.notes && command.notes.length > 0 ? `
-                                <div>
-                                    <h4 class="font-semibold text-gray-900 mb-1 text-sm">Tips</h4>
-                                    <div class="space-y-1">
-                                        ${command.notes.slice(0, 3).map(note => `
-                                            <div class="text-xs text-gray-600">${note}</div>
-                                        `).join('')}
-                                    </div>
-                                </div>
-                            ` : ''}
-                        </div>
-                    </div>
-                </div>
-            </div>
+    <div class="space-y-4">
+      <div>
+        <label class="block text-sm font-medium mb-2">アイテム名</label>
+        <input type="text" id="edit-name" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white">
+      </div>
+      
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-medium mb-2">カテゴリー</label>
+          <select id="edit-category" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white">
+            <option value="教材">📚 教材</option>
+            <option value="文房具">✏️ 文房具</option>
+            <option value="体育用品">⚽ 体育用品</option>
+            <option value="弁当・水筒">🍱 弁当・水筒</option>
+            <option value="制服・服装">👔 制服・服装</option>
+            <option value="楽器">🎵 楽器</option>
+            <option value="部活用品">🏃 部活用品</option>
+            <option value="その他">📦 その他</option>
+          </select>
         </div>
-    `;
+        <div>
+          <label class="block text-sm font-medium mb-2">重要度</label>
+          <select id="edit-priority" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white">
+            <option value="普通">普通</option>
+            <option value="重要">⭐ 重要</option>
+            <option value="必須">‼️ 必須</option>
+          </select>
+        </div>
+      </div>
+      
+      <div>
+        <label class="block text-sm font-medium mb-2">バーコード</label>
+        <input type="text" id="edit-code" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white">
+      </div>
+      
+      <div>
+        <label class="block text-sm font-medium mb-2">メモ</label>
+        <textarea id="edit-memo" rows="2" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"></textarea>
+      </div>
+      
+      <div>
+        <label class="block text-sm font-medium mb-2">必要な曜日</label>
+        <div id="edit-days" class="grid grid-cols-4 sm:grid-cols-7 gap-2">
+          <label class="flex items-center space-x-1"><input type="checkbox" value="月" class="rounded text-blue-600 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600"> <span class="text-sm">月</span></label>
+          <label class="flex items-center space-x-1"><input type="checkbox" value="火" class="rounded text-blue-600 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600"> <span class="text-sm">火</span></label>
+          <label class="flex items-center space-x-1"><input type="checkbox" value="水" class="rounded text-blue-600 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600"> <span class="text-sm">水</span></label>
+          <label class="flex items-center space-x-1"><input type="checkbox" value="木" class="rounded text-blue-600 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600"> <span class="text-sm">木</span></label>
+          <label class="flex items-center space-x-1"><input type="checkbox" value="金" class="rounded text-blue-600 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600"> <span class="text-sm">金</span></label>
+          <label class="flex items-center space-x-1"><input type="checkbox" value="土" class="rounded text-blue-600 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600"> <span class="text-sm">土</span></label>
+          <label class="flex items-center space-x-1"><input type="checkbox" value="日" class="rounded text-blue-600 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600"> <span class="text-sm">日</span></label>
+        </div>
+      </div>
+      
+      <div class="flex gap-2 mt-6">
+        <button id="save-edit" class="flex-1 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-semibold transition-colors duration-200">💾 保存</button>
+        <button onclick="closeEditModal()" class="px-6 py-3 bg-gray-600 hover:bg-gray-700 text-white rounded-lg font-semibold transition-colors duration-200">❌ キャンセル</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div>
+
+<script src="https://unpkg.com/quagga@0.12.1/dist/quagga.min.js"></script>
+<script>
+// ダークモード切り替え機能
+const themeToggleBtn = document.getElementById('theme-toggle');
+const themeToggleDarkIcon = document.getElementById('theme-toggle-dark-icon');
+const themeToggleLightIcon = document.getElementById('theme-toggle-light-icon');
+
+function updateThemeIcons() {
+  if (document.documentElement.classList.contains('dark')) {
+    themeToggleLightIcon.classList.remove('hidden');
+    themeToggleDarkIcon.classList.add('hidden');
+  } else {
+    themeToggleDarkIcon.classList.remove('hidden');
+    themeToggleLightIcon.classList.add('hidden');
+  }
 }
 
-// ========== 開閉機能（前回と同じ） ==========
-function createIndependentToggle(detailsId, iconId) {
-    return function(event) {
-        event.preventDefault();
-        event.stopPropagation();
-        
-        const details = document.getElementById(detailsId);
-        const icon = document.getElementById(iconId);
-        
-        if (!details || !icon) {
-            console.error('Elements not found:', detailsId, iconId);
-            return;
-        }
-        
-        const isHidden = details.style.display === 'none';
-        
-        if (isHidden) {
-            details.style.display = 'block';
-            details.style.opacity = '0';
-            details.style.transition = 'opacity 0.2s ease';
-            
-            requestAnimationFrame(() => {
-                details.style.opacity = '1';
-            });
-            
-            icon.style.transform = 'rotate(180deg)';
-        } else {
-            details.style.opacity = '0';
-            
-            setTimeout(() => {
-                details.style.display = 'none';
-                details.style.opacity = '';
-            }, 200);
-            
-            icon.style.transform = 'rotate(0deg)';
-        }
-    };
-}
-
-// ========== フィルタ + 検索統合（検索リセット対応版） ==========
-function applyFilterAndSearch() {
-    const elements = getElements();
-    const searchTerm = elements.searchInput.value.toLowerCase().trim();
-    const commandWrappers = document.querySelectorAll('.command-card-wrapper');
-    let visibleCards = 0;
-
-    commandWrappers.forEach((wrapper, index) => {
-        const card = wrapper.querySelector('.command-card');
-        if (!card) {
-            console.warn('カードが見つかりません:', wrapper);
-            wrapper.style.display = 'none';
-            return;
-        }
-
-        const commandName = card.dataset.command.toLowerCase();
-        const commandCategory = card.dataset.category;
-        
-        // ステップ1: カテゴリフィルタをチェック
-        let passesFilter = (currentFilter === 'all' || commandCategory === currentFilter);
-        
-        // ステップ2: 検索条件をチェック
-        let passesSearch = true; // デフォルトは通す
-        
-        // 検索ワードがある場合のみ検索条件を適用
-        if (searchTerm.length > 0) {
-            if (searchMode === 'name') {
-                passesSearch = commandName.includes(searchTerm);
-            } else {
-                const cardText = wrapper.textContent.toLowerCase();
-                passesSearch = cardText.includes(searchTerm);
-            }
-        }
-        // 検索ワードが空の場合は passesSearch = true のまま
-        
-        // ステップ3: 表示/非表示の決定（両方の条件を満たす必要がある）
-        const shouldShow = passesFilter && passesSearch;
-        
-        if (shouldShow) {
-            wrapper.style.display = 'block';
-            visibleCards++;
-        } else {
-            wrapper.style.display = 'none';
-        }
-    });
-
-    elements.noResults.style.display = visibleCards === 0 ? 'block' : 'none';
-}
-// ========== 検索機能（リセット対応版） ==========
-function performSearch() {
-    const elements = getElements();
-    const searchTerm = elements.searchInput.value.trim();
-    applyFilterAndSearch();
-}
-
-// ========== debounce検索（リセット対応版） ==========
-function debouncedSearch() {
-    clearTimeout(searchTimeout);
-    
-    // 検索ワードが空の場合は即座に実行（遅延なし）
-    const searchTerm = getElements().searchInput.value.trim();
-    if (searchTerm.length === 0) {
-        performSearch();
-    } else {
-        // 検索ワードがある場合は通常の遅延
-        searchTimeout = setTimeout(performSearch, 150);
-    }
-}
-
-// ========== フィルタ機能（リセット連携版） ==========
-function filterCommands(category, clickedButton) {
-    const elements = getElements();
-    
-    // 現在のフィルタ状態を更新
-    const previousFilter = currentFilter;
-    currentFilter = category;
-    
-    // 全てのボタンをリセット
-    document.querySelectorAll('.filter-btn').forEach(btn => {
-        btn.classList.remove('bg-discord', 'text-white');
-        btn.classList.add('bg-gray-200', 'text-gray-700');
-    });
-    
-    // クリックされたボタンのみをアクティブ化
-    if (clickedButton) {
-        clickedButton.classList.remove('bg-gray-200', 'text-gray-700');
-        clickedButton.classList.add('bg-discord', 'text-white');
-    }
-    
-    // 統合フィルタ+検索を適用
-    applyFilterAndSearch();
-}
-
-// ========== 検索モード切り替え（統合版） ==========
-function toggleSearchMode(mode) {
-    const elements = getElements();
-    const previousMode = searchMode;
-    searchMode = mode;
-    
-    if (mode === 'name') {
-        elements.nameSearchBtn.classList.add('bg-white', 'text-discord');
-        elements.nameSearchBtn.classList.remove('text-white');
-        elements.fullSearchBtn.classList.remove('bg-white', 'text-discord');
-        elements.fullSearchBtn.classList.add('text-white');
-        elements.searchInput.placeholder = 'コマンド名で検索...';
-    } else {
-        elements.fullSearchBtn.classList.add('bg-white', 'text-discord');
-        elements.fullSearchBtn.classList.remove('text-white');
-        elements.nameSearchBtn.classList.remove('bg-white', 'text-discord');
-        elements.nameSearchBtn.classList.add('text-white');
-        elements.searchInput.placeholder = '全文検索...';
-    }
-    
-    // 検索モード変更時も再検索を実行
-    if (elements.searchInput.value.trim()) {
-        applyFilterAndSearch();
-    }
-}
-
-// ========== 全体開閉機能（前回と同じ） ==========
-function expandAllDetails() {
-    allCommands.forEach((_, index) => {
-        const desktopDetails = document.getElementById(`desktop_details_${index}`);
-        const desktopIcon = document.getElementById(`desktop_icon_${index}`);
-        if (desktopDetails && desktopDetails.style.display === 'none') {
-            desktopDetails.style.display = 'block';
-            desktopDetails.style.opacity = '1';
-            if (desktopIcon) desktopIcon.style.transform = 'rotate(180deg)';
-        }
-        
-        const mobileDetails = document.getElementById(`mobile_details_${index}`);
-        const mobileIcon = document.getElementById(`mobile_icon_${index}`);
-        if (mobileDetails && mobileDetails.style.display === 'none') {
-            mobileDetails.style.display = 'block';
-            mobileDetails.style.opacity = '1';
-            if (mobileIcon) mobileIcon.style.transform = 'rotate(180deg)';
-        }
-    });
-}
-
-function collapseAllDetails() {
-    allCommands.forEach((_, index) => {
-        const desktopDetails = document.getElementById(`desktop_details_${index}`);
-        const desktopIcon = document.getElementById(`desktop_icon_${index}`);
-        if (desktopDetails && desktopDetails.style.display !== 'none') {
-            desktopDetails.style.display = 'none';
-            if (desktopIcon) desktopIcon.style.transform = 'rotate(0deg)';
-        }
-        
-        const mobileDetails = document.getElementById(`mobile_details_${index}`);
-        const mobileIcon = document.getElementById(`mobile_icon_${index}`);
-        if (mobileDetails && mobileDetails.style.display !== 'none') {
-            mobileDetails.style.display = 'none';
-            if (mobileIcon) mobileIcon.style.transform = 'rotate(0deg)';
-        }
-    });
-}
-
-// ========== 読み込み（「全て」ボタン対応版） ==========
-async function loadCommands() {
-    const elements = getElements();
-    
-    try {
-        allCommands = await loadCommandsData();
-        
-        if (allCommands.length === 0) {
-            return;
-        }
-
-        elements.loadingMessage.style.display = 'none';
-        
-        const desktopCards = allCommands.map((command, index) => createDesktopCard(command, index)).join('');
-        elements.commandsContainer.innerHTML = desktopCards;
-        
-        const mobileCards = allCommands.map((command, index) => createMobileCard(command, index)).join('');
-        elements.commandsContainerMobile.innerHTML = mobileCards;
-        
-        // フィルタボタンを作成（「全て」ボタン付き）
-        createFilterButtons();
-        
-        // 初期フィルタ状態を設定
-        setInitialFilterState();
-        
-        // トグル機能を設定
-        setupToggleHandlers();
-        
-        elements.commandCount.textContent = `全 ${allCommands.length} コマンド`;
-        
-        // 初期表示を確実に実行
-        applyFilterAndSearch();
-        
-        // デバッグ関数をグローバルに設定
-        window.debugCurrentState = debugCurrentState;
-        window.resetFiltersAndSearch = resetFiltersAndSearch;
-        
-    } catch (error) {
-        console.error('エラー:', error);
-    }
-}
-
-function setupToggleHandlers() {
-    allCommands.forEach((command, index) => {
-        const desktopButton = document.getElementById(`desktop_button_${index}`);
-        if (desktopButton) {
-            desktopButton.onclick = createIndependentToggle(`desktop_details_${index}`, `desktop_icon_${index}`);
-        }
-        
-        const mobileButton = document.getElementById(`mobile_button_${index}`);
-        if (mobileButton) {
-            mobileButton.onclick = createIndependentToggle(`mobile_details_${index}`, `mobile_icon_${index}`);
-        }
-    });
-}
-
-async function loadCommandsData() {
-    const elements = getElements();
-    
-    try {
-        const response = await fetch('commands.json');
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        const data = await response.json();
-        
-        categoryConfig = data.categories || {};
-        return data.commands || [];
-    } catch (error) {
-        console.error('コマンドデータの読み込みに失敗しました:', error);
-        
-        elements.loadingMessage.innerHTML = `
-            <i class="fas fa-exclamation-triangle text-red-500 text-2xl sm:text-4xl mb-2 sm:mb-4"></i>
-            <h3 class="text-lg sm:text-xl font-semibold text-red-600 mb-1 sm:mb-2">データの読み込みに失敗しました</h3>
-            <p class="text-gray-500 text-sm sm:text-base">ページを再読み込みしてください</p>
-        `;
-        return [];
-    }
-}
-
-// ========== フィルターボタン作成（「全て」ボタン追加版） ==========
-function createFilterButtons() {
-    const elements = getElements();
-    const categories = [...new Set(allCommands.map(cmd => cmd.category))];
-    
-    // 既存のボタンを削除してから作成
-    elements.filterButtons.innerHTML = '';
-    
-    // まず「全て」ボタンを作成
-    const allButton = document.createElement('button');
-    allButton.className = 'filter-btn bg-discord text-white px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors';
-    allButton.innerHTML = '<i class="fas fa-list mr-1 sm:mr-2"></i>全て';
-    allButton.setAttribute('data-category', 'all');
-    allButton.onclick = (e) => {
-        e.preventDefault();
-        filterCommands('all', allButton);
-    };
-    elements.filterButtons.appendChild(allButton);
-    
-    // 各カテゴリのボタンを作成
-    categories.forEach(category => {
-        const config = categoryConfig[category];
-        if (config) {
-            const button = document.createElement('button');
-            button.className = 'filter-btn bg-gray-200 text-gray-700 px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors hover:bg-gray-300';
-            
-            // アイコンを明確に設定
-            button.innerHTML = `<i class="${config.icon} mr-1 sm:mr-2" data-category="${category}"></i>${config.name}`;
-            button.setAttribute('data-category', category);
-            button.onclick = (e) => {
-                e.preventDefault();
-                filterCommands(category, button);
-            };
-            
-            elements.filterButtons.appendChild(button);
-        }
-    });
-}
-
-// ========== イベントリスナー設定（強化版） ==========
-function setupEventListeners() {
-    const elements = getElements();
-    
-    elements.nameSearchBtn.addEventListener('click', () => toggleSearchMode('name'));
-    elements.fullSearchBtn.addEventListener('click', () => toggleSearchMode('full'));
-    
-    // 検索入力の設定（改良版）
-    setupSearchInputListener();
-    
-    elements.expandAllBtn.addEventListener('click', expandAllDetails);
-    elements.collapseAllBtn.addEventListener('click', collapseAllDetails);
-    
-    const backToTopBtn = document.getElementById('backToTop');
-    window.addEventListener('scroll', () => {
-        if (window.pageYOffset > 300) {
-            backToTopBtn.classList.remove('opacity-0', 'pointer-events-none');
-        } else {
-            backToTopBtn.classList.add('opacity-0', 'pointer-events-none');
-        }
-    });
-    backToTopBtn.addEventListener('click', () => {
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-    });
-}
-
-// ========== 検索入力イベントの改良 ==========
-function setupSearchInputListener() {
-    const elements = getElements();
-    
-    // 入力イベント
-    elements.searchInput.addEventListener('input', function(e) {
-        const currentValue = e.target.value;
-        debouncedSearch();
-    });
-    
-    // キーボードイベント（Escapeキーでクリア）
-    elements.searchInput.addEventListener('keydown', function(e) {
-        if (e.key === 'Escape') {
-            e.target.value = '';
-            performSearch(); // 即座に実行
-        }
-    });
-}
-
-// ========== デバッグ関数（「全て」ボタン確認版） ==========
-function debugCurrentState() {
-    const elements = getElements();
-    const searchTerm = elements.searchInput.value;
-    
-    // フィルタボタンの状態確認
-    const allButton = document.querySelector('.filter-btn[data-category="all"]');
-    const activeButton = document.querySelector('.filter-btn.bg-discord');
-    
-    const wrappers = document.querySelectorAll('.command-card-wrapper');
-    const visible = Array.from(wrappers).filter(w => w.style.display !== 'none');
-    const hidden = Array.from(wrappers).filter(w => w.style.display === 'none');
-}
-
-// F12コンソールで debugCurrentState() を実行してデバッグ可能
-window.debugCurrentState = debugCurrentState;
-
-// ========== 手動リセット機能 ==========
-function resetFiltersAndSearch() {
-    const elements = getElements();
-    
-    // 検索ワードをクリア
-    elements.searchInput.value = '';
-    
-    // フィルタを「全て」に戻す
-    currentFilter = 'all';
-    
-    // 「全て」ボタンをアクティブにし、他のボタンを非アクティブにする
-    document.querySelectorAll('.filter-btn').forEach(btn => {
-        const category = btn.getAttribute('data-category');
-        if (category === 'all') {
-            btn.classList.add('bg-discord', 'text-white');
-            btn.classList.remove('bg-gray-200', 'text-gray-700');
-        } else {
-            btn.classList.remove('bg-discord', 'text-white');
-            btn.classList.add('bg-gray-200', 'text-gray-700');
-        }
-    });
-    
-    // 表示を更新
-    applyFilterAndSearch();
-    
-}
-
-// ========== 初期フィルタ状態の設定 ==========
-function setInitialFilterState() {
-    // 初期状態では「全て」を選択状態にする
-    currentFilter = 'all';
-    
-    const allButton = document.querySelector('.filter-btn[data-category="all"]');
-    if (allButton) {
-        allButton.classList.add('bg-discord', 'text-white');
-        allButton.classList.remove('bg-gray-200', 'text-gray-700');
-    }
-}
-
-// ========== URL状態管理機能 ==========
-
-// URLパラメータから状態を読み取る
-function getStateFromURL() {
-    const urlParams = new URLSearchParams(window.location.search);
-    
-    return {
-        search: urlParams.get('search') || '',
-        category: urlParams.get('category') || 'all',
-        mode: urlParams.get('mode') || 'name',
-        command: urlParams.get('command') || '',
-        expanded: urlParams.get('expanded') === 'true'
-    };
-}
-
-// 現在の状態をURLに反映
-function updateURL(state, replaceState = false) {
-    const urlParams = new URLSearchParams();
-    
-    // 検索ワードがある場合のみ追加
-    if (state.search && state.search.trim()) {
-        urlParams.set('search', state.search.trim());
-    }
-    
-    // カテゴリが「全て」以外の場合のみ追加
-    if (state.category && state.category !== 'all') {
-        urlParams.set('category', state.category);
-    }
-    
-    // 検索モードがデフォルト以外の場合のみ追加
-    if (state.mode && state.mode !== 'name') {
-        urlParams.set('mode', state.mode);
-    }
-    
-    // 特定コマンドが指定されている場合
-    if (state.command && state.command.trim()) {
-        urlParams.set('command', state.command.trim());
-    }
-    
-    // 全展開状態の場合
-    if (state.expanded) {
-        urlParams.set('expanded', 'true');
-    }
-    
-    // URLを構築
-    const newURL = urlParams.toString() ? 
-        `${window.location.pathname}?${urlParams.toString()}` : 
-        window.location.pathname;
-    
-    // URL更新
-    if (replaceState) {
-        window.history.replaceState(null, '', newURL);
-    } else {
-        window.history.pushState(null, '', newURL);
-    }
-    
-    console.log('URL更新:', newURL);
-}
-
-// URLから状態を復元
-function restoreStateFromURL() {
-    const state = getStateFromURL();
-    const elements = getElements();
-    
-    console.log('URL状態復元:', state);
-    
-    // 検索ワードを復元
-    if (state.search) {
-        elements.searchInput.value = state.search;
-    }
-    
-    // 検索モードを復元
-    if (state.mode !== searchMode) {
-        toggleSearchMode(state.mode);
-    }
-    
-    // カテゴリフィルタを復元
-    if (state.category !== currentFilter) {
-        // 対応するボタンを見つけてクリック
-        const targetButton = document.querySelector(`.filter-btn[data-category="${state.category}"]`);
-        if (targetButton) {
-            filterCommands(state.category, targetButton);
-        }
-    }
-    
-    // 特定コマンドを開く
-    if (state.command) {
-        setTimeout(() => {
-            highlightAndOpenCommand(state.command);
-        }, 500); // カード生成後に実行
-    }
-    
-    // 全展開状態を復元
-    if (state.expanded) {
-        setTimeout(() => {
-            expandAllDetails();
-        }, 600);
-    }
-    
-    // 検索とフィルタを適用
-    if (state.search || state.category !== 'all') {
-        setTimeout(() => {
-            applyFilterAndSearch();
-        }, 300);
-    }
-}
-
-// 特定コマンドをハイライトして開く
-function highlightAndOpenCommand(commandName) {
-    const commandCards = document.querySelectorAll('.command-card');
-    let targetCard = null;
-    let targetIndex = -1;
-    
-    commandCards.forEach((card, index) => {
-        if (card.dataset.command.toLowerCase() === commandName.toLowerCase()) {
-            targetCard = card;
-            targetIndex = Math.floor(index / 2); // デスクトップとモバイルで2倍
-        }
-    });
-    
-    if (targetCard && targetIndex >= 0) {
-        console.log('コマンドを開きます:', commandName);
-        
-        // 詳細を開く
-        const desktopDetails = document.getElementById(`desktop_details_${targetIndex}`);
-        const desktopIcon = document.getElementById(`desktop_icon_${targetIndex}`);
-        const mobileDetails = document.getElementById(`mobile_details_${targetIndex}`);
-        const mobileIcon = document.getElementById(`mobile_icon_${targetIndex}`);
-        
-        if (desktopDetails && desktopDetails.style.display === 'none') {
-            desktopDetails.style.display = 'block';
-            desktopDetails.style.opacity = '1';
-            if (desktopIcon) desktopIcon.style.transform = 'rotate(180deg)';
-        }
-        
-        if (mobileDetails && mobileDetails.style.display === 'none') {
-            mobileDetails.style.display = 'block';
-            mobileDetails.style.opacity = '1';
-            if (mobileIcon) mobileIcon.style.transform = 'rotate(180deg)';
-        }
-        
-        // カードをハイライト
-        targetCard.style.boxShadow = '0 0 0 3px #5865F2';
-        targetCard.style.borderColor = '#5865F2';
-        
-        // スムーズスクロール
-        setTimeout(() => {
-            targetCard.scrollIntoView({ 
-                behavior: 'smooth', 
-                block: 'center' 
-            });
-        }, 100);
-        
-        // 3秒後にハイライトを削除
-        setTimeout(() => {
-            targetCard.style.boxShadow = '';
-            targetCard.style.borderColor = '';
-        }, 3000);
-    }
-}
-
-// 現在の状態を取得
-function getCurrentState() {
-    const elements = getElements();
-    const expandedDetails = document.querySelectorAll('[id^="desktop_details_"][style*="display: block"], [id^="mobile_details_"][style*="display: block"]');
-    
-    return {
-        search: elements.searchInput.value.trim(),
-        category: currentFilter,
-        mode: searchMode,
-        command: '', // 特定コマンドは手動指定のみ
-        expanded: expandedDetails.length === allCommands.length * 2 // 全て展開されているか
-    };
-}
-
-// ========== 既存機能の拡張 ==========
-
-// 検索実行時にURL更新
-function performSearchWithURL() {
-    performSearch();
-    
-    // URL更新（debounce処理）
-    clearTimeout(searchTimeout);
-    searchTimeout = setTimeout(() => {
-        const state = getCurrentState();
-        updateURL(state, true); // replaceStateを使用
-    }, 500);
-}
-
-// フィルタ変更時にURL更新
-function filterCommandsWithURL(category, clickedButton) {
-    filterCommands(category, clickedButton);
-    
-    // URL更新
-    const state = getCurrentState();
-    updateURL(state);
-}
-
-// 検索モード切り替え時にURL更新
-function toggleSearchModeWithURL(mode) {
-    toggleSearchMode(mode);
-    
-    // URL更新
-    const state = getCurrentState();
-    updateURL(state, true);
-}
-
-// 全展開/折りたたみ時にURL更新
-function expandAllDetailsWithURL() {
-    expandAllDetails();
-    
-    const state = getCurrentState();
-    updateURL(state, true);
-}
-
-function collapseAllDetailsWithURL() {
-    collapseAllDetails();
-    
-    const state = getCurrentState();
-    updateURL(state, true);
-}
-
-// ========== イベントリスナーの更新 ==========
-function setupEventListenersWithURL() {
-    const elements = getElements();
-    
-    // 検索モード切り替え
-    elements.nameSearchBtn.addEventListener('click', () => toggleSearchModeWithURL('name'));
-    elements.fullSearchBtn.addEventListener('click', () => toggleSearchModeWithURL('full'));
-    
-    // 検索入力（URL対応版）
-    elements.searchInput.addEventListener('input', performSearchWithURL);
-    
-    // Escapeキーでクリア
-    elements.searchInput.addEventListener('keydown', function(e) {
-        if (e.key === 'Escape') {
-            e.target.value = '';
-            performSearchWithURL();
-        }
-    });
-    
-    // 全体展開/折りたたみ
-    elements.expandAllBtn.addEventListener('click', expandAllDetailsWithURL);
-    elements.collapseAllBtn.addEventListener('click', collapseAllDetailsWithURL);
-    
-    // ブラウザの戻る/進むボタン対応
-    window.addEventListener('popstate', function(e) {
-        console.log('ブラウザ履歴変更検出');
-        restoreStateFromURL();
-    });
-    
-    // その他のイベント（変更なし）
-    const backToTopBtn = document.getElementById('backToTop');
-    window.addEventListener('scroll', () => {
-        if (window.pageYOffset > 300) {
-            backToTopBtn.classList.remove('opacity-0', 'pointer-events-none');
-        } else {
-            backToTopBtn.classList.add('opacity-0', 'pointer-events-none');
-        }
-    });
-    backToTopBtn.addEventListener('click', () => {
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-    });
-    
-    console.log('URL対応イベントリスナー設定完了');
-}
-
-// ========== フィルタボタン作成（URL対応版） ==========
-function createFilterButtonsWithURL() {
-    const elements = getElements();
-    const categories = [...new Set(allCommands.map(cmd => cmd.category))];
-    
-    elements.filterButtons.innerHTML = '';
-    
-    // 「全て」ボタン
-    const allButton = document.createElement('button');
-    allButton.className = 'filter-btn bg-discord text-white px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors';
-    allButton.innerHTML = '<i class="fas fa-list mr-1 sm:mr-2"></i>全て';
-    allButton.setAttribute('data-category', 'all');
-    allButton.onclick = (e) => {
-        e.preventDefault();
-        filterCommandsWithURL('all', allButton);
-    };
-    elements.filterButtons.appendChild(allButton);
-    
-    // カテゴリボタン
-    categories.forEach(category => {
-        const config = categoryConfig[category];
-        if (config) {
-            const button = document.createElement('button');
-            button.className = 'filter-btn bg-gray-200 text-gray-700 px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors hover:bg-gray-300';
-            button.innerHTML = `<i class="${config.icon} mr-1 sm:mr-2"></i>${config.name}`;
-            button.setAttribute('data-category', category);
-            button.onclick = (e) => {
-                e.preventDefault();
-                filterCommandsWithURL(category, button);
-            };
-            elements.filterButtons.appendChild(button);
-        }
-    });
-}
-
-// ========== 読み込み（URL対応版） ==========
-async function loadCommandsWithURL() {
-    const elements = getElements();
-    
-    try {
-        allCommands = await loadCommandsData();
-        
-        if (allCommands.length === 0) {
-            return;
-        }
-
-        elements.loadingMessage.style.display = 'none';
-        
-        const desktopCards = allCommands.map((command, index) => createDesktopCard(command, index)).join('');
-        elements.commandsContainer.innerHTML = desktopCards;
-        
-        const mobileCards = allCommands.map((command, index) => createMobileCard(command, index)).join('');
-        elements.commandsContainerMobile.innerHTML = mobileCards;
-        
-        // フィルタボタンを作成（URL対応版）
-        createFilterButtonsWithURL();
-        
-        // トグル機能を設定
-        setupToggleHandlers();
-        
-        elements.commandCount.textContent = `全 ${allCommands.length} コマンド`;
-        
-        // URL状態を復元
-        restoreStateFromURL();
-        
-        console.log('URL対応版でコマンド読み込み完了:', allCommands.length);
-        
-        // グローバル関数設定
-        window.debugCurrentState = debugCurrentState;
-        window.resetFiltersAndSearch = resetFiltersAndSearch;
-        window.updateURL = updateURL;
-        window.highlightAndOpenCommand = highlightAndOpenCommand;
-        
-    } catch (error) {
-        console.error('エラー:', error);
-    }
-}
-
-// ========== 初期化（URL対応版） ==========
-document.addEventListener('DOMContentLoaded', function() {
-    console.log('URL状態管理対応版 初期化開始...');
-    setupEventListenersWithURL();
-    loadCommandsWithURL();
-    
-    console.log('URL機能が利用可能です:');
-    console.log('  - 検索やフィルタの状態がURLに保存されます');
-    console.log('  - ブラウザの戻る/進むボタンが使用できます');
-    console.log('  - highlightAndOpenCommand("コマンド名") で特定コマンドを開けます');
+themeToggleBtn.addEventListener('click', function() {
+  document.documentElement.classList.toggle('dark');
+  
+  if (document.documentElement.classList.contains('dark')) {
+    localStorage.setItem('dark-mode', 'true');
+  } else {
+    localStorage.setItem('dark-mode', 'false');
+  }
+  
+  updateThemeIcons();
 });
+
+// 初期テーマアイコン設定
+updateThemeIcons();
+
+// PWA設定
+const manifestData = {
+  "name": "忘れ物防止システム Pro",
+  "short_name": "忘れ物Pro",
+  "description": "教材・持ち物を統合管理する忘れ物防止システム",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#007bff",
+  "orientation": "portrait",
+  "icons": [
+    { "src": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==", "sizes": "192x192", "type": "image/png" },
+    { "src": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==", "sizes": "512x512", "type": "image/png" }
+  ]
+};
+
+const manifestBlob = new Blob([JSON.stringify(manifestData)], {type: 'application/json'});
+const manifestURL = URL.createObjectURL(manifestBlob);
+const link = document.createElement('link');
+link.rel = 'manifest';
+link.href = manifestURL;
+document.head.appendChild(link);
+
+// Service Worker登録
+const swCode = `
+const CACHE_NAME = 'wasuremono-pro-v2.2';
+const urlsToCache = ['./', 'https://unpkg.com/quagga@0.12.1/dist/quagga.min.js'];
+self.addEventListener('install', e => e.waitUntil(caches.open(CACHE_NAME).then(c => c.addAll(urlsToCache).catch(() => c.add('./')))));
+self.addEventListener('fetch', e => e.respondWith(caches.match(e.request).then(r => r || fetch(e.request).catch(() => caches.match('./')))));
+`;
+
+if ('serviceWorker' in navigator) {
+  const swBlob = new Blob([swCode], {type: 'application/javascript'});
+  const swURL = URL.createObjectURL(swBlob);
+  navigator.serviceWorker.register(swURL).then(() => console.log('SW registered')).catch(console.error);
+}
+
+// IndexedDB設定
+const DB_NAME = 'wasuremonoPro';
+const DB_VERSION = 2;
+const STORE_NAME = 'items';
+let db;
+
+function openDB() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME, DB_VERSION);
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => { db = request.result; resolve(db); };
+    request.onupgradeneeded = e => {
+      db = e.target.result;
+      if (!db.objectStoreNames.contains(STORE_NAME)) {
+        const store = db.createObjectStore(STORE_NAME, { keyPath: 'id', autoIncrement: true });
+        store.createIndex('category', 'category', { unique: false });
+        store.createIndex('name', 'name', { unique: false });
+        store.createIndex('code', 'code', { unique: false });
+      }
+    };
+  });
+}
+
+// CRUD操作
+function addItem(item) {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    const store = tx.objectStore(STORE_NAME);
+    const request = store.add(item);
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+function getAllItems() {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readonly');
+    const store = tx.objectStore(STORE_NAME);
+    const request = store.getAll();
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+function updateItem(item) {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    const store = tx.objectStore(STORE_NAME);
+    const request = store.put(item);
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error);
+  });
+}
+
+function deleteItem(id) {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    const store = tx.objectStore(STORE_NAME);
+    const request = store.delete(id);
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error);
+  });
+}
+
+function clearItems() {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    const store = tx.objectStore(STORE_NAME);
+    const request = store.clear();
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error);
+  });
+}
+
+// グローバル変数
+let items = [];
+let currentDay = null;
+let currentCategory = 'all';
+let sortBy = 'name';
+let isScanning = false;
+let isCheckScanning = false;
+let editingItem = null;
+let checkMode = 'manual';
+let scanResults = new Map();
+
+// UI要素
+const tabs = document.querySelectorAll('.tab-btn');
+const tabContents = document.querySelectorAll('.tab-content');
+const status = document.getElementById('status');
+const checkStatus = document.getElementById('check-status');
+
+// タブ切り替え
+tabs.forEach(tab => {
+  tab.addEventListener('click', () => {
+    tabs.forEach(t => {
+      t.classList.remove('bg-blue-600', 'text-white');
+      t.classList.add('text-gray-600', 'dark:text-gray-300', 'hover:bg-gray-100', 'dark:hover:bg-gray-700');
+    });
+    tab.classList.add('bg-blue-600', 'text-white');
+    tab.classList.remove('text-gray-600', 'dark:text-gray-300', 'hover:bg-gray-100', 'dark:hover:bg-gray-700');
+    
+    const target = tab.dataset.tab;
+    tabContents.forEach(tc => {
+      tc.classList.toggle('hidden', tc.id !== target);
+    });
+    
+    if (target === 'quick') {
+      updateStats();
+      renderTodayChecklist();
+    } else if (target === 'items') {
+      renderItems();
+    } else if (target === 'check') {
+      if (!currentDay) selectCurrentDay();
+      updateCheckDisplay();
+    } else if (target === 'settings') {
+      updateDetailedStats();
+    }
+  });
+});
+
+// スキャンモード切り替え
+document.querySelectorAll('.scan-mode-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.scan-mode-btn').forEach(b => {
+      b.classList.remove('bg-blue-600', 'text-white');
+      b.classList.add('text-gray-600', 'dark:text-gray-300', 'hover:bg-gray-200', 'dark:hover:bg-gray-600');
+    });
+    btn.classList.add('bg-blue-600', 'text-white');
+    btn.classList.remove('text-gray-600', 'dark:text-gray-300', 'hover:bg-gray-200', 'dark:hover:bg-gray-600');
+    
+    checkMode = btn.dataset.mode;
+    
+    if (checkMode === 'manual') {
+      document.getElementById('manual-check-mode').classList.remove('hidden');
+      document.getElementById('scan-check-mode').classList.add('hidden');
+      if (isCheckScanning) stopCheckScanning();
+    } else {
+      document.getElementById('manual-check-mode').classList.add('hidden');
+      document.getElementById('scan-check-mode').classList.remove('hidden');
+      updateCheckDisplay();
+    }
+  });
+});
+
+// 統計更新
+function updateStats() {
+  const total = items.length;
+  const checked = items.filter(i => i.checked).length;
+  const today = getTodayItems().length;
+  
+  document.getElementById('total-items').textContent = total;
+  document.getElementById('checked-items').textContent = checked;
+  document.getElementById('today-items').textContent = today;
+}
+
+function updateDetailedStats() {
+  const total = items.length;
+  const categories = [...new Set(items.map(i => i.category))].length;
+  const barcodes = items.filter(i => i.code).length;
+  const checked = items.filter(i => i.checked).length;
+  const completion = total > 0 ? Math.round((checked / total) * 100) : 0;
+  
+  document.getElementById('stat-total').textContent = total;
+  document.getElementById('stat-categories').textContent = categories;
+  document.getElementById('stat-barcodes').textContent = barcodes;
+  document.getElementById('stat-completion').textContent = completion + '%';
+}
+
+// 今日のアイテム取得
+function getTodayItems() {
+  const days = ['日', '月', '火', '水', '木', '金', '土'];
+  const today = days[new Date().getDay()];
+  return items.filter(i => i.days.includes(today));
+}
+
+// 今日のチェックリスト表示
+function renderTodayChecklist() {
+  const todayItems = getTodayItems();
+  const list = document.getElementById('today-checklist');
+  
+  if (todayItems.length === 0) {
+    list.innerHTML = '<li class="text-center text-gray-500 dark:text-gray-400 py-8">今日の予定はありません</li>';
+    return;
+  }
+  
+  list.innerHTML = '';
+  todayItems.forEach(item => {
+    const li = createItemElement(item, true);
+    list.appendChild(li);
+  });
+}
+
+// アイテム要素作成
+function createItemElement(item, isQuick = false) {
+  const li = document.createElement('li');
+  li.className = `flex items-center p-3 border-2 rounded-lg transition-all duration-200 ${
+    item.checked 
+      ? 'bg-gradient-to-r from-green-50 to-green-100 dark:from-green-900/30 dark:to-green-800/30 border-green-500' 
+      : 'bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 hover:border-blue-300 dark:hover:border-blue-500'
+  }`;
+  li.dataset.id = item.id;
+
+  const checkbox = document.createElement('input');
+  checkbox.type = 'checkbox';
+  checkbox.className = 'mr-3 w-5 h-5 text-blue-600 rounded focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600';
+  checkbox.checked = !!item.checked;
+  checkbox.addEventListener('change', async () => {
+    item.checked = checkbox.checked;
+    await updateItem(item);
+    updateStats();
+    updateCheckDisplay();
+    if (!isQuick) renderItems();
+    if (isQuick) renderTodayChecklist();
+    
+    if (checkbox.checked && navigator.vibrate) {
+      navigator.vibrate([100, 50, 100]);
+    }
+  });
+
+  const info = document.createElement('div');
+  info.className = 'flex-1';
+  
+  let priorityIcon = '';
+  if (item.priority === '重要') priorityIcon = '⭐ ';
+  else if (item.priority === '必須') priorityIcon = '‼️ ';
+  
+  let categoryIcon = getCategoryIcon(item.category);
+  
+  info.innerHTML = `
+    <div class="font-semibold text-gray-900 dark:text-gray-100">${priorityIcon}${item.name}</div>
+    <div class="text-sm text-gray-600 dark:text-gray-400 mt-1">
+      <span class="text-gray-700 dark:text-gray-300 font-medium">${categoryIcon} ${item.category}</span>
+      ${item.code ? `<span class="text-blue-600 dark:text-blue-400"> • ${item.code}</span>` : ''}
+      ${item.days.length > 0 ? `<span class="text-green-600 dark:text-green-400"> • ${item.days.join(', ')}</span>` : ''}
+      ${item.memo ? `<br><small class="text-gray-500 dark:text-gray-400">${item.memo}</small>` : ''}
+    </div>
+  `;
+
+  if (!isQuick) {
+    const actions = document.createElement('div');
+    actions.className = 'flex gap-2 ml-3';
+    
+    const editBtn = document.createElement('button');
+    editBtn.textContent = '✏️';
+    editBtn.className = 'px-2 py-1 bg-cyan-600 hover:bg-cyan-700 text-white rounded text-sm transition-colors duration-200';
+    editBtn.addEventListener('click', () => openEditModal(item));
+    
+    const deleteBtn = document.createElement('button');
+    deleteBtn.textContent = '🗑';
+    deleteBtn.className = 'px-2 py-1 bg-red-600 hover:bg-red-700 text-white rounded text-sm transition-colors duration-200';
+    deleteBtn.addEventListener('click', async () => {
+      if (confirm(`「${item.name}」を削除しますか？`)) {
+        await deleteItem(item.id);
+        items = items.filter(i => i.id !== item.id);
+        renderItems();
+        updateStats();
+        updateCheckDisplay();
+        showStatus('🗑 削除しました', 'success');
+      }
+    });
+    
+    actions.appendChild(editBtn);
+    actions.appendChild(deleteBtn);
+    li.appendChild(actions);
+  }
+
+  li.appendChild(checkbox);
+  li.appendChild(info);
+  
+  return li;
+}
+
+// カテゴリーアイコン取得
+function getCategoryIcon(category) {
+  const icons = {
+    '教材': '📚', '文房具': '✏️', '体育用品': '⚽', '弁当・水筒': '🍱',
+    '制服・服装': '👔', '楽器': '🎵', '部活用品': '🏃', 'その他': '📦'
+  };
+  return icons[category] || '📦';
+}
+
+// ステータス表示
+function showStatus(message, type = 'info') {
+  const statusEl = document.getElementById('status-msg') || status;
+  statusEl.textContent = message;
+  
+  statusEl.className = 'mt-4 text-center font-semibold rounded-lg p-3 transition-colors duration-200';
+  if (type === 'success') {
+    statusEl.className += ' bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 border border-green-300 dark:border-green-700';
+  } else if (type === 'warning') {
+    statusEl.className += ' bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300 border border-yellow-300 dark:border-yellow-700';
+  } else if (type === 'error') {
+    statusEl.className += ' bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-300 dark:border-red-700';
+  } else {
+    statusEl.className += ' bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-300 dark:border-blue-700';
+  }
+  
+  setTimeout(() => {
+    statusEl.textContent = '';
+    statusEl.className = 'mt-4 text-center font-semibold';
+  }, 3000);
+}
+
+// チェック状況表示の統一化
+function updateCheckDisplay() {
+  if (!currentDay) return;
+  renderChecklist(currentDay);
+  renderScanChecklist(currentDay);
+}
+
+// 手動チェックリスト表示
+function renderChecklist(day) {
+  const list = document.getElementById('checklist');
+  const progress = document.getElementById('check-progress');
+  
+  const filtered = items.filter(i => i.days.includes(day));
+  
+  if (filtered.length === 0) {
+    list.innerHTML = '<li class="text-center text-gray-500 dark:text-gray-400 py-8">' + day + '曜日のアイテムはありません</li>';
+    progress.innerHTML = '';
+    return;
+  }
+  
+  const checkedCount = filtered.filter(i => i.checked).length;
+  const totalCount = filtered.length;
+  const percentage = Math.round((checkedCount / totalCount) * 100);
+  
+  progress.innerHTML = `
+    <div class="${checkedCount === totalCount ? 'text-green-600 dark:text-green-400' : 'text-blue-600 dark:text-blue-400'}">
+      ${day}曜日: ${checkedCount}/${totalCount} 完了 (${percentage}%) ${checkedCount === totalCount ? '🎉' : ''}
+    </div>
+  `;
+  
+  list.innerHTML = '';
+  
+  filtered.sort((a, b) => {
+    const priorities = { '必須': 3, '重要': 2, '普通': 1 };
+    return priorities[b.priority] - priorities[a.priority];
+  });
+  
+  filtered.forEach(item => {
+    const li = createItemElement(item, true);
+    if (item.priority === '必須') {
+      li.style.borderColor = '#dc2626';
+      li.classList.add('ring-2', 'ring-red-200', 'dark:ring-red-800');
+    } else if (item.priority === '重要') {
+      li.style.borderColor = '#eab308';
+      li.classList.add('ring-2', 'ring-yellow-200', 'dark:ring-yellow-800');
+    }
+    list.appendChild(li);
+  });
+}
+
+// スキャンモード用チェックリスト表示
+function renderScanChecklist(day) {
+  const list = document.getElementById('scan-checklist');
+  const progress = document.getElementById('scan-check-progress');
+  
+  const filtered = items.filter(i => i.days.includes(day));
+  
+  if (filtered.length === 0) {
+    list.innerHTML = '<li class="text-center text-gray-500 dark:text-gray-400 py-8">' + day + '曜日のアイテムはありません</li>';
+    progress.innerHTML = '';
+    return;
+  }
+  
+  const checkedCount = filtered.filter(i => i.checked).length;
+  const totalCount = filtered.length;
+  const percentage = Math.round((checkedCount / totalCount) * 100);
+  
+  progress.innerHTML = `
+    <div class="${checkedCount === totalCount ? 'text-green-600 dark:text-green-400' : 'text-blue-600 dark:text-blue-400'}">
+      ${day}曜日: ${checkedCount}/${totalCount} 完了 (${percentage}%) ${checkedCount === totalCount ? '🎉' : ''}
+    </div>
+  `;
+  
+  list.innerHTML = '';
+  
+  filtered.sort((a, b) => {
+    const priorities = { '必須': 3, '重要': 2, '普通': 1 };
+    return priorities[b.priority] - priorities[a.priority];
+  });
+  
+  filtered.forEach(item => {
+    const li = createItemElement(item, true);
+    if (item.priority === '必須') {
+      li.style.borderColor = '#dc2626';
+      li.classList.add('ring-2', 'ring-red-200', 'dark:ring-red-800');
+    } else if (item.priority === '重要') {
+      li.style.borderColor = '#eab308';
+      li.classList.add('ring-2', 'ring-yellow-200', 'dark:ring-yellow-800');
+    }
+    list.appendChild(li);
+  });
+}
+
+// クイック追加
+document.getElementById('quick-add').addEventListener('click', async () => {
+  const name = document.getElementById('quick-name').value.trim();
+  const category = document.getElementById('quick-category').value;
+  
+  if (!name) {
+    document.getElementById('quick-name').focus();
+    return;
+  }
+  
+  const days = ['日', '月', '火', '水', '木', '金', '土'];
+  const today = days[new Date().getDay()];
+  
+  const success = await addNewItem({
+    name, category, priority: '普通', days: [today], code: '', memo: ''
+  });
+  
+  if (success) {
+    document.getElementById('quick-name').value = '';
+    renderTodayChecklist();
+    updateStats();
+    showStatus(`✅ 「${name}」を追加しました`, 'success');
+  }
+});
+
+document.getElementById('quick-name').addEventListener('keypress', e => {
+  if (e.key === 'Enter') document.getElementById('quick-add').click();
+});
+
+// クイックスキャン
+document.getElementById('quick-scan').addEventListener('click', () => {
+  document.querySelector('[data-tab="scanner"]').click();
+  setTimeout(() => {
+    if (!isScanning) document.getElementById('scan-btn').click();
+  }, 500);
+});
+
+// アイテム追加（共通関数）
+async function addNewItem(itemData) {
+  if (!itemData.name.trim()) return false;
+  
+  if (itemData.code && items.some(i => i.code === itemData.code)) {
+    showStatus('同じバーコードのアイテムが既に登録されています', 'warning');
+    return false;
+  }
+  
+  const item = {
+    name: itemData.name.trim(),
+    category: itemData.category || 'その他',
+    priority: itemData.priority || '普通',
+    code: itemData.code ? itemData.code.trim() : '',
+    memo: itemData.memo ? itemData.memo.trim() : '',
+    days: itemData.days || [],
+    checked: false,
+    createdAt: new Date().toISOString()
+  };
+  
+  try {
+    item.id = await addItem(item);
+    items.push(item);
+    return true;
+  } catch (err) {
+    showStatus('追加に失敗しました: ' + err.message, 'error');
+    return false;
+  }
+}
+
+// 詳細登録
+document.getElementById('add-detail').addEventListener('click', async () => {
+  const name = document.getElementById('detail-name').value;
+  const category = document.getElementById('detail-category').value;
+  const priority = document.getElementById('detail-priority').value;
+  const code = document.getElementById('detail-code').value;
+  const memo = document.getElementById('detail-memo').value;
+  const dayCheckboxes = document.querySelectorAll('#scanner input[type=checkbox]:checked');
+  const days = Array.from(dayCheckboxes).map(cb => cb.value);
+  
+  if (!name.trim()) {
+    document.getElementById('detail-name').focus();
+    showStatus('アイテム名を入力してください', 'warning');
+    return;
+  }
+  
+  const success = await addNewItem({ name, category, priority, code, memo, days });
+  if (success) {
+    document.getElementById('detail-name').value = '';
+    document.getElementById('detail-code').value = '';
+    document.getElementById('detail-memo').value = '';
+    dayCheckboxes.forEach(cb => cb.checked = false);
+    
+    updateStats();
+    renderItems();
+    updateCheckDisplay();
+    showStatus(`✅ 「${name}」を登録しました`, 'success');
+  }
+});
+
+// バーコードスキャナー設定
+const scanBtn = document.getElementById('scan-btn');
+const stopBtn = document.getElementById('stop-btn');
+const viewport = document.getElementById('viewport');
+
+const checkScanBtn = document.getElementById('check-scan-btn');
+const checkStopBtn = document.getElementById('check-stop-btn');
+const checkViewport = document.getElementById('check-viewport');
+
+const quaggaConfig = {
+  inputStream: {
+    name: 'Live', type: 'LiveStream',
+    constraints: {
+      facingMode: 'environment',
+      width: { min: 640, ideal: 800, max: 1280 },
+      height: { min: 480, ideal: 600, max: 720 }
+    },
+    area: { top: '20%', right: '15%', left: '15%', bottom: '20%' },
+    willReadFrequently: true
+  },
+  frequency: 8, numOfWorkers: 2,
+  decoder: { readers: ['ean_reader', 'ean_8_reader', 'code_128_reader'], multiple: false },
+  locate: true,
+  locator: { patchSize: 'medium', halfSample: false },
+  debug: { drawBoundingBox: true, showFrequency: false, drawScanline: true, showPattern: false }
+};
+
+// 登録用スキャン検出
+function onDetected(result) {
+  const code = result.codeResult.code;
+  if (!code) return;
+  
+  const existing = items.find(i => i.code === code);
+  if (existing) {
+    status.textContent = `✅ 既に登録済み: ${existing.name} (${code})`;
+    status.className = 'p-3 rounded-lg mb-4 text-center font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 border border-green-300 dark:border-green-700';
+    if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+    return;
+  }
+  
+  status.textContent = `📖 検出: ${code} - アイテム名を入力してください`;
+  status.className = 'p-3 rounded-lg mb-4 text-center font-medium bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-700';
+  document.getElementById('detail-code').value = code;
+  document.getElementById('detail-name').focus();
+  
+  if (navigator.vibrate) navigator.vibrate([100, 50, 100, 50, 100]);
+}
+
+// チェック用スキャン検出
+function onCheckDetected(result) {
+  const code = result.codeResult.code;
+  if (!code) return;
+  
+  const dayItems = items.filter(i => i.days.includes(currentDay));
+  const foundItem = dayItems.find(i => i.code === code);
+  
+  if (foundItem) {
+    if (!foundItem.checked) {
+      foundItem.checked = true;
+      updateItem(foundItem);
+      updateStats();
+      updateCheckDisplay();
+      
+      scanResults.set(code, {
+        item: foundItem,
+        timestamp: new Date(),
+        status: 'checked'
+      });
+      
+      checkStatus.textContent = `✅ チェック完了: ${foundItem.name}`;
+      checkStatus.className = 'p-3 rounded-lg mb-4 text-center font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 border border-green-300 dark:border-green-700';
+      
+      const checkResult = document.getElementById('check-result');
+      checkResult.className = 'p-4 rounded-lg mb-4 text-center font-semibold bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 border border-green-300 dark:border-green-700';
+      checkResult.innerHTML = `
+        <div>✅ <strong>${foundItem.name}</strong></div>
+        <div class="text-sm mt-1">自動でチェックしました</div>
+      `;
+      checkResult.classList.remove('hidden');
+      
+      if (navigator.vibrate) navigator.vibrate([100, 50, 100, 50, 100]);
+      
+    } else {
+      checkStatus.textContent = `ℹ️ 既にチェック済み: ${foundItem.name}`;
+      checkStatus.className = 'p-3 rounded-lg mb-4 text-center font-medium bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300 border border-yellow-300 dark:border-yellow-700';
+      if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+    }
+    
+  } else {
+    const anyItem = items.find(i => i.code === code);
+    
+    if (anyItem) {
+      checkStatus.textContent = `⚠️ ${currentDay}曜日には不要: ${anyItem.name}`;
+      checkStatus.className = 'p-3 rounded-lg mb-4 text-center font-medium bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300 border border-yellow-300 dark:border-yellow-700';
+      
+      const checkResult = document.getElementById('check-result');
+      checkResult.className = 'p-4 rounded-lg mb-4 text-center font-semibold bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300 border border-yellow-300 dark:border-yellow-700';
+      checkResult.innerHTML = `
+        <div>⚠️ <strong>${anyItem.name}</strong></div>
+        <div class="text-sm mt-1">${currentDay}曜日のリストにありません</div>
+      `;
+      checkResult.classList.remove('hidden');
+    } else {
+      checkStatus.textContent = `❌ 未登録アイテム: ${code}`;
+      checkStatus.className = 'p-3 rounded-lg mb-4 text-center font-medium bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-300 dark:border-red-700';
+      
+      const checkResult = document.getElementById('check-result');
+      checkResult.className = 'p-4 rounded-lg mb-4 text-center font-semibold bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-300 dark:border-red-700';
+      checkResult.innerHTML = `
+        <div>❌ <strong>未登録アイテム</strong></div>
+        <div class="text-sm mt-1">バーコード: ${code}</div>
+      `;
+      checkResult.classList.remove('hidden');
+    }
+    
+    if (navigator.vibrate) navigator.vibrate([300, 100, 300]);
+  }
+  
+  renderScanResults();
+  
+  setTimeout(() => {
+    checkStatus.textContent = '📷 バーコードを読み取って自動チェック';
+    checkStatus.className = 'p-3 rounded-lg mb-4 text-center font-medium bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-700';
+    document.getElementById('check-result').classList.add('hidden');
+  }, 3000);
+}
+
+// スキャナー制御
+function startScanning() {
+  if (isScanning) return;
+  status.textContent = '🔧 カメラ初期化中...';
+  status.className = 'p-3 rounded-lg mb-4 text-center font-medium bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-700';
+  
+  Quagga.init({...quaggaConfig, inputStream: {...quaggaConfig.inputStream, target: viewport}}, err => {
+    if (err) {
+      status.textContent = `❌ カメラエラー: ${err.message || err}`;
+      status.className = 'p-3 rounded-lg mb-4 text-center font-medium bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-300 dark:border-red-700';
+      return;
+    }
+    
+    Quagga.start();
+    isScanning = true;
+    Quagga.onDetected(onDetected);
+    status.textContent = '🔍 バーコードを緑枠内に合わせてください';
+    status.className = 'p-3 rounded-lg mb-4 text-center font-medium bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-700';
+    scanBtn.disabled = true;
+    stopBtn.disabled = false;
+  });
+}
+
+function stopScanning() {
+  if (!isScanning) return;
+  Quagga.offDetected(onDetected);
+  Quagga.stop();
+  isScanning = false;
+  status.textContent = '⏹ スキャン停止';
+  status.className = 'p-3 rounded-lg mb-4 text-center font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600';
+  scanBtn.disabled = false;
+  stopBtn.disabled = true;
+}
+
+function startCheckScanning() {
+  if (isCheckScanning) return;
+  checkStatus.textContent = '🔧 カメラ初期化中...';
+  checkStatus.className = 'p-3 rounded-lg mb-4 text-center font-medium bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-700';
+  
+  Quagga.init({...quaggaConfig, inputStream: {...quaggaConfig.inputStream, target: checkViewport}}, err => {
+    if (err) {
+      checkStatus.textContent = `❌ カメラエラー: ${err.message || err}`;
+      checkStatus.className = 'p-3 rounded-lg mb-4 text-center font-medium bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-300 dark:border-red-700';
+      return;
+    }
+    
+    Quagga.start();
+    isCheckScanning = true;
+    Quagga.onDetected(onCheckDetected);
+    checkStatus.textContent = '🔍 バーコードを緑枠内に合わせてください';
+    checkStatus.className = 'p-3 rounded-lg mb-4 text-center font-medium bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-700';
+    checkScanBtn.disabled = true;
+    checkStopBtn.disabled = false;
+  });
+}
+
+function stopCheckScanning() {
+  if (!isCheckScanning) return;
+  Quagga.offDetected(onCheckDetected);
+  Quagga.stop();
+  isCheckScanning = false;
+  checkStatus.textContent = '⏹ スキャン停止';
+  checkStatus.className = 'p-3 rounded-lg mb-4 text-center font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600';
+  checkScanBtn.disabled = false;
+  checkStopBtn.disabled = true;
+}
+
+scanBtn.addEventListener('click', startScanning);
+stopBtn.addEventListener('click', stopScanning);
+checkScanBtn.addEventListener('click', startCheckScanning);
+checkStopBtn.addEventListener('click', stopCheckScanning);
+
+// スキャン結果表示
+function renderScanResults() {
+  const list = document.getElementById('scan-results');
+  
+  if (scanResults.size === 0) {
+    list.innerHTML = '<li class="text-center text-gray-500 dark:text-gray-400 py-4">スキャン結果なし</li>';
+    return;
+  }
+  
+  list.innerHTML = '';
+  
+  const sortedResults = Array.from(scanResults.entries())
+    .sort(([,a], [,b]) => new Date(b.timestamp) - new Date(a.timestamp));
+  
+  sortedResults.forEach(([code, result]) => {
+    const li = document.createElement('li');
+    li.className = 'flex items-center p-3 bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-900/30 dark:to-blue-800/30 border border-blue-300 dark:border-blue-600 rounded-lg animate-pulse-soft';
+    
+    const time = result.timestamp.toLocaleTimeString();
+    const statusIcon = result.status === 'checked' ? '✅' : '❌';
+    
+    li.innerHTML = `
+      <div class="flex items-center w-full">
+        <div class="mr-3 text-xl">${statusIcon}</div>
+        <div class="flex-1">
+          <div class="font-semibold text-gray-900 dark:text-gray-100">${result.item ? result.item.name : '未登録アイテム'}</div>
+          <div class="text-sm text-gray-600 dark:text-gray-400">
+            ${code} • ${time}
+          </div>
+        </div>
+      </div>
+    `;
+    
+    list.appendChild(li);
+  });
+}
+
+// アイテム一覧表示
+function renderItems() {
+  const list = document.getElementById('items-list');
+  const title = document.getElementById('items-title');
+  
+  let filtered = items;
+  
+  if (currentCategory !== 'all') {
+    filtered = filtered.filter(i => i.category === currentCategory);
+  }
+  
+  const searchTerm = document.getElementById('search-input').value.toLowerCase();
+  if (searchTerm) {
+    filtered = filtered.filter(i => 
+      i.name.toLowerCase().includes(searchTerm) ||
+      i.category.toLowerCase().includes(searchTerm) ||
+      (i.code && i.code.toLowerCase().includes(searchTerm)) ||
+      (i.memo && i.memo.toLowerCase().includes(searchTerm))
+    );
+  }
+  
+  filtered.sort((a, b) => {
+    if (sortBy === 'name') return a.name.localeCompare(b.name);
+    if (sortBy === 'category') return a.category.localeCompare(b.category);
+    if (sortBy === 'priority') {
+      const priorities = { '必須': 3, '重要': 2, '普通': 1 };
+      return priorities[b.priority] - priorities[a.priority];
+    }
+    if (sortBy === 'created') return new Date(b.createdAt) - new Date(a.createdAt);
+    return 0;
+  });
+  
+  title.textContent = `${getCategoryIcon(currentCategory)} ${currentCategory === 'all' ? '全アイテム' : currentCategory} (${filtered.length}件)`;
+  
+  if (filtered.length === 0) {
+    list.innerHTML = '<li class="text-center text-gray-500 dark:text-gray-400 py-8">該当するアイテムがありません</li>';
+    return;
+  }
+  
+  list.innerHTML = '';
+  filtered.forEach(item => {
+    const li = createItemElement(item, false);
+    list.appendChild(li);
+  });
+}
+
+// カテゴリータブ
+document.getElementById('category-tabs').addEventListener('click', e => {
+  if (e.target.classList.contains('category-btn')) {
+    document.querySelectorAll('.category-btn').forEach(btn => {
+      btn.classList.remove('bg-blue-600', 'text-white');
+      btn.classList.add('text-blue-600', 'dark:text-blue-400', 'bg-white', 'dark:bg-gray-800', 'hover:bg-blue-50', 'dark:hover:bg-gray-700');
+    });
+    e.target.classList.add('bg-blue-600', 'text-white');
+    e.target.classList.remove('text-blue-600', 'dark:text-blue-400', 'bg-white', 'dark:bg-gray-800', 'hover:bg-blue-50', 'dark:hover:bg-gray-700');
+    currentCategory = e.target.dataset.category;
+    renderItems();
+  }
+});
+
+// 検索機能
+const searchInput = document.getElementById('search-input');
+const searchClear = document.getElementById('search-clear');
+
+searchInput.addEventListener('input', () => {
+  renderItems();
+  searchClear.classList.toggle('hidden', !searchInput.value);
+});
+
+searchClear.addEventListener('click', () => {
+  searchInput.value = '';
+  searchClear.classList.add('hidden');
+  renderItems();
+});
+
+// ソート切り替え
+document.getElementById('sort-toggle').addEventListener('click', () => {
+  const sorts = ['name', 'category', 'priority', 'created'];
+  const currentIndex = sorts.indexOf(sortBy);
+  sortBy = sorts[(currentIndex + 1) % sorts.length];
+  
+  const labels = { name: '名前順', category: 'カテゴリー順', priority: '重要度順', created: '追加日順' };
+  document.getElementById('sort-toggle').textContent = `📊 ${labels[sortBy]}`;
+  
+  renderItems();
+});
+
+// チェックリスト機能
+function selectCurrentDay() {
+  const days = ['日', '月', '火', '水', '木', '金', '土'];
+  const today = days[new Date().getDay()];
+  currentDay = today;
+  
+  document.querySelectorAll('.preset-btn').forEach(btn => {
+    btn.classList.remove('bg-blue-600', 'text-white');
+    btn.classList.add('text-blue-600', 'dark:text-blue-400', 'bg-white', 'dark:bg-gray-800', 'hover:bg-blue-50', 'dark:hover:bg-gray-700');
+    if (btn.dataset.day === today) {
+      btn.classList.add('bg-blue-600', 'text-white');
+      btn.classList.remove('text-blue-600', 'dark:text-blue-400', 'bg-white', 'dark:bg-gray-800', 'hover:bg-blue-50', 'dark:hover:bg-gray-700');
+    }
+  });
+  
+  updateCheckDisplay();
+}
+
+// 曜日選択
+document.getElementById('preset-days').addEventListener('click', e => {
+  if (e.target.classList.contains('preset-btn')) {
+    currentDay = e.target.dataset.day;
+    
+    document.querySelectorAll('.preset-btn').forEach(btn => {
+      btn.classList.remove('bg-blue-600', 'text-white');
+      btn.classList.add('text-blue-600', 'dark:text-blue-400', 'bg-white', 'dark:bg-gray-800', 'hover:bg-blue-50', 'dark:hover:bg-gray-700');
+    });
+    e.target.classList.add('bg-blue-600', 'text-white');
+    e.target.classList.remove('text-blue-600', 'dark:text-blue-400', 'bg-white', 'dark:bg-gray-800', 'hover:bg-blue-50', 'dark:hover:bg-gray-700');
+    
+    updateCheckDisplay();
+    scanResults.clear();
+    renderScanResults();
+  }
+});
+
+// 手動モード チェックリスト操作
+document.getElementById('check-all').addEventListener('click', async () => {
+  await performCheckAll();
+});
+
+document.getElementById('uncheck-all').addEventListener('click', async () => {
+  await performUncheckAll();
+});
+
+document.getElementById('reset-check').addEventListener('click', async () => {
+  await performResetCheck();
+});
+
+// スキャンモード チェックリスト操作
+document.getElementById('scan-check-all').addEventListener('click', async () => {
+  await performCheckAll();
+});
+
+document.getElementById('scan-uncheck-all').addEventListener('click', async () => {
+  await performUncheckAll();
+});
+
+document.getElementById('scan-reset-check').addEventListener('click', async () => {
+  await performResetCheck();
+});
+
+// 共通チェック操作関数
+async function performCheckAll() {
+  const dayItems = items.filter(i => i.days.includes(currentDay));
+  for (const item of dayItems) {
+    if (!item.checked) {
+      item.checked = true;
+      await updateItem(item);
+    }
+  }
+  updateCheckDisplay();
+  updateStats();
+  renderTodayChecklist();
+  if (navigator.vibrate) navigator.vibrate([100, 50, 100, 50, 100]);
+}
+
+async function performUncheckAll() {
+  const dayItems = items.filter(i => i.days.includes(currentDay));
+  for (const item of dayItems) {
+    if (item.checked) {
+      item.checked = false;
+      await updateItem(item);
+    }
+  }
+  updateCheckDisplay();
+  updateStats();
+  renderTodayChecklist();
+}
+
+async function performResetCheck() {
+  if (confirm('全てのアイテムのチェック状態をリセットしますか？')) {
+    for (const item of items) {
+      item.checked = false;
+      await updateItem(item);
+    }
+    renderItems();
+    updateCheckDisplay();
+    renderTodayChecklist();
+    updateStats();
+    scanResults.clear();
+    renderScanResults();
+    showStatus('🔄 チェック状態をリセットしました', 'success');
+  }
+}
+
+// 編集モーダル
+function openEditModal(item) {
+  editingItem = item;
+  document.getElementById('edit-name').value = item.name;
+  document.getElementById('edit-category').value = item.category;
+  document.getElementById('edit-priority').value = item.priority;
+  document.getElementById('edit-code').value = item.code || '';
+  document.getElementById('edit-memo').value = item.memo || '';
+  
+  document.querySelectorAll('#edit-days input[type=checkbox]').forEach(cb => {
+    cb.checked = item.days.includes(cb.value);
+  });
+  
+  document.getElementById('edit-modal').classList.remove('hidden');
+}
+
+function closeEditModal() {
+  document.getElementById('edit-modal').classList.add('hidden');
+  editingItem = null;
+}
+
+document.getElementById('save-edit').addEventListener('click', async () => {
+  if (!editingItem) return;
+  
+  const name = document.getElementById('edit-name').value.trim();
+  if (!name) {
+    showStatus('アイテム名を入力してください', 'warning');
+    return;
+  }
+  
+  const days = Array.from(document.querySelectorAll('#edit-days input[type=checkbox]:checked'))
+                   .map(cb => cb.value);
+  
+  editingItem.name = name;
+  editingItem.category = document.getElementById('edit-category').value;
+  editingItem.priority = document.getElementById('edit-priority').value;
+  editingItem.code = document.getElementById('edit-code').value.trim();
+  editingItem.memo = document.getElementById('edit-memo').value.trim();
+  editingItem.days = days;
+  editingItem.updatedAt = new Date().toISOString();
+  
+  try {
+    await updateItem(editingItem);
+    renderItems();
+    updateCheckDisplay();
+    renderTodayChecklist();
+    updateStats();
+    closeEditModal();
+    showStatus('✅ 更新しました', 'success');
+  } catch (err) {
+    showStatus('更新に失敗しました: ' + err.message, 'error');
+  }
+});
+
+// 全削除（続き）
+document.getElementById('clear-items').addEventListener('click', async () => {
+  if (confirm('本当に全てのアイテムを削除しますか？\nこの操作は取り消せません。')) {
+    try {
+      await clearItems();
+      items = [];
+      renderItems();
+      renderTodayChecklist();
+      updateStats();
+      document.getElementById('checklist').innerHTML = '';
+      document.getElementById('scan-checklist').innerHTML = '';
+      scanResults.clear();
+      renderScanResults();
+      showStatus('🗑 全てのアイテムを削除しました', 'success');
+    } catch (err) {
+      showStatus('削除に失敗しました: ' + err.message, 'error');
+    }
+  }
+});
+
+// データ管理
+document.getElementById('export-btn').addEventListener('click', async () => {
+  try {
+    const allItems = await getAllItems();
+    const exportData = {
+      items: allItems,
+      exportedAt: new Date().toISOString(),
+      version: '2.2',
+      app: 'wasuremono-pro'
+    };
+    const dataStr = JSON.stringify(exportData, null, 2);
+    const blob = new Blob([dataStr], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `忘れ物防止Pro_${new Date().toISOString().split('T')[0]}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showStatus('✅ データをエクスポートしました', 'success');
+  } catch (err) {
+    showStatus('エクスポートに失敗しました: ' + err.message, 'error');
+  }
+});
+
+document.getElementById('import-file').addEventListener('change', async e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  
+  const reader = new FileReader();
+  reader.onload = async () => {
+    try {
+      const data = JSON.parse(reader.result);
+      const importItems = data.items || data;
+      
+      if (!Array.isArray(importItems)) {
+        throw new Error('不正なデータ形式です');
+      }
+      
+      if (confirm(`${importItems.length}件のアイテムをインポートします。\n既存のデータは削除されます。続行しますか？`)) {
+        await clearItems();
+        
+        for (const item of importItems) {
+          delete item.id;
+          item.checked = false;
+          if (!item.category) item.category = 'その他';
+          if (!item.priority) item.priority = '普通';
+          if (!item.days) item.days = [];
+          await addItem(item);
+        }
+        
+        await loadItems();
+        updateDetailedStats();
+        scanResults.clear();
+        renderScanResults();
+        showStatus(`✅ ${importItems.length}件のアイテムをインポートしました`, 'success');
+      }
+    } catch (err) {
+      showStatus('インポートに失敗しました: ' + err.message, 'error');
+    }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+});
+
+// バックアップ・復元
+document.getElementById('backup-btn').addEventListener('click', async () => {
+  try {
+    const allItems = await getAllItems();
+    localStorage.setItem('wasuremono-backup', JSON.stringify({
+      items: allItems,
+      backupAt: new Date().toISOString()
+    }));
+    showStatus('💾 バックアップを作成しました', 'success');
+  } catch (err) {
+    showStatus('バックアップに失敗しました: ' + err.message, 'error');
+  }
+});
+
+document.getElementById('restore-btn').addEventListener('click', async () => {
+  try {
+    const backup = localStorage.getItem('wasuremono-backup');
+    if (!backup) {
+      showStatus('バックアップが見つかりません', 'warning');
+      return;
+    }
+    
+    const data = JSON.parse(backup);
+    if (confirm(`バックアップ（${new Date(data.backupAt).toLocaleString()}）から復元しますか？\n現在のデータは削除されます。`)) {
+      await clearItems();
+      
+      for (const item of data.items) {
+        delete item.id;
+        await addItem(item);
+      }
+      
+      await loadItems();
+      updateDetailedStats();  // 統計情報も更新
+      scanResults.clear();
+      renderScanResults();
+      showStatus('🔄 バックアップから復元しました', 'success');
+    }
+  } catch (err) {
+    showStatus('復元に失敗しました: ' + err.message, 'error');
+  }
+});
+
+// データ読み込み
+async function loadItems() {
+  try {
+    items = await getAllItems();
+    renderItems();
+    renderTodayChecklist();
+    updateStats();
+  } catch (err) {
+    console.error('Load items failed:', err);
+  }
+}
+
+// PWAインストール
+let deferredPrompt;
+const installBtn = document.getElementById('install-pwa');
+
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredPrompt = e;
+  installBtn.classList.remove('hidden');
+});
+
+installBtn.addEventListener('click', async () => {
+  if (!deferredPrompt) {
+    showStatus('このブラウザではPWAインストールがサポートされていません', 'warning');
+    return;
+  }
+  
+  deferredPrompt.prompt();
+  const { outcome } = await deferredPrompt.userChoice;
+  
+  if (outcome === 'accepted') {
+    installBtn.classList.add('hidden');
+    showStatus('📱 PWAがインストールされました', 'success');
+  }
+  
+  deferredPrompt = null;
+});
+
+// 初期化
+openDB().then(async () => {
+  await loadItems();
+  selectCurrentDay();
+  
+  if (items.length === 0) {
+    setTimeout(() => {
+      showStatus('👋 ようこそ！まずは教材や持ち物を追加してみましょう', 'info');
+    }, 1000);
+  }
+});
+
+// クリーンアップ
+window.addEventListener('beforeunload', () => {
+  if (isScanning) stopScanning();
+  if (isCheckScanning) stopCheckScanning();
+});
+
+</script>
+</body>
+</html>
