@@ -4,12 +4,12 @@ const CACHE_NAME = 'wasuremono-pro-v2.2';
 /* オフラインでも必要なファイルを列挙 */
 const urlsToCache = [
   '/',                       // index.html
-  '/repo-name/',             // GitHub Pages のルート（上と同じ）
-  '/repo-name/index.html',
-  '/repo-name/style.css',
-  '/repo-name/main.js',
-  '/repo-name/icons/icon-192.png',
-  '/repo-name/icons/icon-512.png',
+  '/CheckMate-V2',             // GitHub Pages のルート（上と同じ）
+  '/CheckMate-V2index.html',
+  '/CheckMate-V2style.css',
+  '/CheckMate-V2main.js',
+  ・・'/CheckMate-V2icons/icon-192.png',
+  '/CheckMate-V2icons/icon-512.png',
   'https://unpkg.com/quagga@0.12.1/dist/quagga.min.js'
 ];
 
