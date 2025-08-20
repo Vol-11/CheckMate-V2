@@ -6,37 +6,10 @@
 <title>📚 忘れ物防止システム Pro</title>
 <meta name="theme-color" content="#007bff">
 <script src="https://cdn.tailwindcss.com"></script>
-<script>
-tailwind.config = {
-  darkMode: 'class',
-  theme: {
-    extend: {
-      colors: {
-        primary: {
-          50: '#eff6ff',
-          500: '#3b82f6',
-          600: '#2563eb',
-          700: '#1d4ed8',
-        }
-      },
-      animation: {
-        'pulse-soft': 'pulse 0.6s ease-in-out',
-      }
-    }
-  }
-}
-</script>
+<script src="/js/style_config.js"></script>
+<script src="/js/dark_mode_startup.js"></script>
 
 <!-- ダークモード初期化スクリプト -->
-<script>
-if (localStorage.getItem('dark-mode') === 'true' || 
-   (!('dark-mode' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-  document.documentElement.classList.add('dark');
-} else {
-  document.documentElement.classList.remove('dark');
-}
-</script>
-
 </head>
 <body class="bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 transition-colors duration-300">
 <div class="max-w-lg mx-auto p-2 sm:p-4">
@@ -395,148 +368,10 @@ if (localStorage.getItem('dark-mode') === 'true' ||
 </div>
 
 <script src="https://unpkg.com/quagga@0.12.1/dist/quagga.min.js"></script>
+<script src="/js/dark_mode.js"></script>
+<script src="/js/pwa.js"></script>
+<script src="/js/indexdb.js"></script>
 <script>
-// ダークモード切り替え機能
-const themeToggleBtn = document.getElementById('theme-toggle');
-const themeToggleDarkIcon = document.getElementById('theme-toggle-dark-icon');
-const themeToggleLightIcon = document.getElementById('theme-toggle-light-icon');
-
-function updateThemeIcons() {
-  if (document.documentElement.classList.contains('dark')) {
-    themeToggleLightIcon.classList.remove('hidden');
-    themeToggleDarkIcon.classList.add('hidden');
-  } else {
-    themeToggleDarkIcon.classList.remove('hidden');
-    themeToggleLightIcon.classList.add('hidden');
-  }
-}
-
-themeToggleBtn.addEventListener('click', function() {
-  document.documentElement.classList.toggle('dark');
-  
-  if (document.documentElement.classList.contains('dark')) {
-    localStorage.setItem('dark-mode', 'true');
-  } else {
-    localStorage.setItem('dark-mode', 'false');
-  }
-  
-  updateThemeIcons();
-});
-
-// 初期テーマアイコン設定
-updateThemeIcons();
-
-// PWA設定
-const manifestData = {
-  "name": "忘れ物防止システム Pro",
-  "short_name": "忘れ物Pro",
-  "description": "教材・持ち物を統合管理する忘れ物防止システム",
-  "start_url": "./",
-  "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#007bff",
-  "orientation": "portrait",
-  "icons": [
-    { "src": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==", "sizes": "192x192", "type": "image/png" },
-    { "src": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==", "sizes": "512x512", "type": "image/png" }
-  ]
-};
-
-const manifestBlob = new Blob([JSON.stringify(manifestData)], {type: 'application/json'});
-const manifestURL = URL.createObjectURL(manifestBlob);
-const link = document.createElement('link');
-link.rel = 'manifest';
-link.href = manifestURL;
-document.head.appendChild(link);
-
-// Service Worker登録
-const swCode = `
-const CACHE_NAME = 'wasuremono-pro-v2.2';
-const urlsToCache = ['./', 'https://unpkg.com/quagga@0.12.1/dist/quagga.min.js'];
-self.addEventListener('install', e => e.waitUntil(caches.open(CACHE_NAME).then(c => c.addAll(urlsToCache).catch(() => c.add('./')))));
-self.addEventListener('fetch', e => e.respondWith(caches.match(e.request).then(r => r || fetch(e.request).catch(() => caches.match('./')))));
-`;
-
-if ('serviceWorker' in navigator) {
-  const swBlob = new Blob([swCode], {type: 'application/javascript'});
-  const swURL = URL.createObjectURL(swBlob);
-  navigator.serviceWorker.register(swURL).then(() => console.log('SW registered')).catch(console.error);
-}
-
-// IndexedDB設定
-const DB_NAME = 'wasuremonoPro';
-const DB_VERSION = 2;
-const STORE_NAME = 'items';
-let db;
-
-function openDB() {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, DB_VERSION);
-    request.onerror = () => reject(request.error);
-    request.onsuccess = () => { db = request.result; resolve(db); };
-    request.onupgradeneeded = e => {
-      db = e.target.result;
-      if (!db.objectStoreNames.contains(STORE_NAME)) {
-        const store = db.createObjectStore(STORE_NAME, { keyPath: 'id', autoIncrement: true });
-        store.createIndex('category', 'category', { unique: false });
-        store.createIndex('name', 'name', { unique: false });
-        store.createIndex('code', 'code', { unique: false });
-      }
-    };
-  });
-}
-
-// CRUD操作
-function addItem(item) {
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE_NAME, 'readwrite');
-    const store = tx.objectStore(STORE_NAME);
-    const request = store.add(item);
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
-}
-
-function getAllItems() {
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE_NAME, 'readonly');
-    const store = tx.objectStore(STORE_NAME);
-    const request = store.getAll();
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
-}
-
-function updateItem(item) {
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE_NAME, 'readwrite');
-    const store = tx.objectStore(STORE_NAME);
-    const request = store.put(item);
-    request.onsuccess = () => resolve();
-    request.onerror = () => reject(request.error);
-  });
-}
-
-function deleteItem(id) {
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE_NAME, 'readwrite');
-    const store = tx.objectStore(STORE_NAME);
-    const request = store.delete(id);
-    request.onsuccess = () => resolve();
-    request.onerror = () => reject(request.error);
-  });
-}
-
-function clearItems() {
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE_NAME, 'readwrite');
-    const store = tx.objectStore(STORE_NAME);
-    const request = store.clear();
-    request.onsuccess = () => resolve();
-    request.onerror = () => reject(request.error);
-  });
-}
-
 // グローバル変数
 let items = [];
 let currentDay = null;
