@@ -1,0 +1,326 @@
+/* カスタムアニメーション */
+@keyframes pulse-soft {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.8;
+    transform: scale(1.02);
+  }
+}
+
+.animate-pulse-soft {
+  animation: pulse-soft 0.6s ease-in-out;
+}
+
+/* ページ遷移アニメーション */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeOut {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+}
+
+.fade-in {
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+.fade-out {
+  animation: fadeOut 0.3s ease-in-out;
+}
+
+/* ボタンのホバーアニメーション */
+.btn-hover {
+  transition: all 0.2s ease-in-out;
+}
+
+.btn-hover:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.btn-hover:active {
+  transform: translateY(0);
+}
+
+/* タブ切り替えアニメーション */
+.tab-btn {
+  transition: all 0.2s ease-in-out;
+  position: relative;
+}
+
+.tab-btn::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  width: 0;
+  height: 2px;
+  background: currentColor;
+  transition: all 0.2s ease-in-out;
+  transform: translateX(-50%);
+}
+
+.tab-btn.bg-blue-600::after {
+  width: 80%;
+}
+
+/* モーダルアニメーション */
+@keyframes modalIn {
+  from {
+    opacity: 0;
+    transform: scale(0.9) translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes modalOut {
+  from {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.9) translateY(-20px);
+  }
+}
+
+#edit-modal:not(.hidden) {
+  animation: modalIn 0.3s ease-out;
+}
+
+#edit-modal.closing {
+  animation: modalOut 0.3s ease-out;
+}
+
+#edit-modal > div {
+  animation: modalIn 0.3s ease-out 0.1s both;
+}
+
+/* ステータス表示のアニメーション */
+@keyframes statusIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes statusOut {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+}
+
+.status-message {
+  animation: statusIn 0.3s ease-out;
+}
+
+.status-message.fade-out {
+  animation: statusOut 0.3s ease-out;
+}
+
+/* チェックボックスのアニメーション */
+input[type="checkbox"] {
+  transition: all 0.2s ease-in-out;
+}
+
+input[type="checkbox"]:checked {
+  transform: scale(1.05);
+}
+
+/* スキャンガイドのアニメーション */
+@keyframes scanGuide {
+  0%, 100% {
+    opacity: 0.6;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.02);
+  }
+}
+
+.guide {
+  animation: scanGuide 2s ease-in-out infinite;
+}
+
+/* ローディングスピナー */
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.loading-spinner {
+  animation: spin 1s linear infinite;
+}
+
+/* カウンターアニメーション */
+@keyframes countUp {
+  from {
+    transform: scale(0.8);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.stat-number {
+  animation: countUp 0.5s ease-out;
+}
+
+/* 検索入力のフォーカスアニメーション */
+#search-input:focus {
+  animation: pulse-soft 0.3s ease-out;
+}
+
+/* カテゴリーボタンの切り替えアニメーション */
+.category-btn {
+  transition: all 0.2s ease-in-out;
+}
+
+.category-btn.bg-blue-600 {
+  animation: pulse-soft 0.3s ease-out;
+}
+
+/* プログレスバーのアニメーション */
+@keyframes progressFill {
+  from {
+    width: 0%;
+  }
+  to {
+    width: var(--progress-width);
+  }
+}
+
+.progress-bar {
+  animation: progressFill 0.8s ease-out;
+}
+
+/* リスト項目の追加アニメーション */
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.list-item-new {
+  animation: slideIn 0.3s ease-out;
+}
+
+/* 削除アニメーション */
+@keyframes slideOut {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+    height: auto;
+    padding: 0.75rem;
+    margin: 0.5rem 0;
+  }
+  to {
+    opacity: 0;
+    transform: translateX(20px);
+    height: 0;
+    padding: 0;
+    margin: 0;
+  }
+}
+
+.list-item-removing {
+  animation: slideOut 0.3s ease-out forwards;
+}
+
+/* スクロール時のアニメーション */
+@keyframes scrollFade {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.scroll-fade-in {
+  animation: scrollFade 0.5s ease-out;
+}
+
+/* バイブレーション効果 */
+@keyframes vibrate {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-2px); }
+  40% { transform: translateX(2px); }
+  60% { transform: translateX(-2px); }
+  80% { transform: translateX(2px); }
+}
+
+.vibrate {
+  animation: vibrate 0.3s ease-in-out;
+}
+
+/* 成功時のパルスアニメーション */
+@keyframes successPulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(34, 197, 94, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0);
+  }
+}
+
+.success-pulse {
+  animation: successPulse 0.6s ease-out;
+}
+
+/* エラー時のシェイクアニメーション */
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
+  20%, 40%, 60%, 80% { transform: translateX(5px); }
+}
+
+.shake {
+  animation: shake 0.6s ease-in-out;
+}
