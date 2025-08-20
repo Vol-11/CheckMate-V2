@@ -6,8 +6,10 @@ const urlsToCache = [
   '/',                       // index.html
   '/CheckMate-V2/',             // GitHub Pages のルート（上と同じ）
   '/CheckMate-V2/index.html',
-  '/CheckMate-V2/style.css',
-  '/CheckMate-V2/main.js',
+  '/CheckMate-V2/js/dark_mode.js',
+    '/CheckMate-V2/js/indexdb.js',
+    '/CheckMate-V2/js/style_config.js',
+    '/CheckMate-V2/js/dark_mode_startup.js',
   // '/CheckMate-V2/icons/icon-192.png',
   '/CheckMate-V2/icons/icon-512.png',
   'https://unpkg.com/quagga@0.12.1/dist/quagga.min.js'
