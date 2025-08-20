@@ -16,10 +16,18 @@ const urlsToCache = [
 /* インストール時にファイルをキャッシュ */
 self.addEventListener('install', event => {
   event.waitUntil(
-    caches.open(CACHE_NAME)
-          .then(cache => cache.addAll(urlsToCache))
+    caches.open(CACHE_NAME).then(async cache => {
+      for (const url of urlsToCache) {
+        try {
+          await cache.add(url);
+        } catch (err) {
+          console.error('❌ cache failed:', url, err);
+        }
+      }
+    })
   );
 });
+
 
 /* 新旧キャッシュを整理（任意 ─ 推奨） */
 self.addEventListener('activate', event => {
