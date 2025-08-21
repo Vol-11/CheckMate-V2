@@ -16,6 +16,7 @@ tabs.forEach(tab => {
     if (target === 'quick') {
       updateStats();
       renderTodayChecklist();
+      renderTomorrowChecklist();
     } else if (target === 'items') {
       renderItems();
     } else if (target === 'check') {
