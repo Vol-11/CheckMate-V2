@@ -84,10 +84,17 @@
     </div>
   </div>
 
-  <div class="bg-white dark:bg-gray-800 rounded-xl p-4 sm:p-6 shadow-md">
-    <h3 class="text-lg font-semibold mb-4 flex items-center"><span class="mr-2">📅</span>今日のチェックリスト</h3>
-    <ul id="today-checklist" class="space-y-2"></ul>
-  </div>
+    <div class="space-y-4 sm:space-y-6">
+      <div class="bg-white dark:bg-gray-800 rounded-xl p-4 sm:p-6 shadow-md">
+        <h3 class="text-lg font-semibold mb-4 flex items-center"><span class="mr-2">📅</span>今日のチェックリスト</h3>
+        <ul id="today-checklist" class="space-y-2"></ul>
+      </div>
+      <div class="bg-white dark:bg-gray-800 rounded-xl p-4 sm:p-6 shadow-md">
+        <h3 class="text-lg font-semibold mb-4 flex items-center"><span class="mr-2">📅</span>明日のチェックリスト</h3>
+        <ul id="tomorrow-checklist" class="space-y-2"></ul>
+      </div>
+    </div>
+
 </div>
 
 <!-- スキャンタブ（登録用） -->
@@ -816,6 +823,7 @@ async function performCheckAll() {
   updateCheckDisplay();
   updateStats();
   renderTodayChecklist();
+  renderTomorrowChecklist()
   if (navigator.vibrate) navigator.vibrate([100, 50, 100, 50, 100]);
 }
 
@@ -830,6 +838,7 @@ async function performUncheckAll() {
   updateCheckDisplay();
   updateStats();
   renderTodayChecklist();
+  renderTomorrowChecklist()
 }
 
 async function performResetCheck() {
@@ -841,6 +850,7 @@ async function performResetCheck() {
     renderItems();
     updateCheckDisplay();
     renderTodayChecklist();
+    renderTomorrowChecklist()
     updateStats();
     scanResults.clear();
     renderScanResults();
@@ -894,6 +904,7 @@ document.getElementById('save-edit').addEventListener('click', async () => {
     renderItems();
     updateCheckDisplay();
     renderTodayChecklist();
+    renderTomorrowChecklist()
     updateStats();
     closeEditModal();
     showStatus('✅ 更新しました', 'success');
@@ -910,6 +921,7 @@ document.getElementById('clear-items').addEventListener('click', async () => {
       items = [];
       renderItems();
       renderTodayChecklist();
+      renderTomorrowChecklist()
       updateStats();
       document.getElementById('checklist').innerHTML = '';
       document.getElementById('scan-checklist').innerHTML = '';
@@ -1034,6 +1046,7 @@ async function loadItems() {
     items = await getAllItems();
     renderItems();
     renderTodayChecklist();
+    renderTomorrowChecklist();
     updateStats();
   } catch (err) {
     console.error('Load items failed:', err);
