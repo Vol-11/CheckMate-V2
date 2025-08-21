@@ -34,7 +34,7 @@ function createItemElement(item, isQuick = false) {
     updateStats();
     updateCheckDisplay();
     if (!isQuick) renderItems();
-    if (isQuick) renderTodayChecklist();
+    if (isQuick) renderTodayChecklist() || renderTomorrowChecklist();
 
     if (checkbox.checked && navigator.vibrate) {
       navigator.vibrate([100, 50, 100]);
