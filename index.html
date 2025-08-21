@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html lang="ja" xmlns="http://www.w3.org/1999/html">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -379,125 +379,14 @@
 <script src="https://unpkg.com/quagga@0.12.1/dist/quagga.min.js"></script>
 <script src="js/dark_mode.js"></script>
 <script src="js/indexdb.js"></script>
+<script src="js/global.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/tab.js"></script>
+<script src="js/scan_mode.js"></script>
+<script src="js/stats.js"></script>
+<script src="js/items.js"></script>
+<script src="js/checklist.js"></script>
 <script>
-// グローバル変数
-let items = [];
-let currentDay = null;
-let currentCategory = 'all';
-let sortBy = 'name';
-let isScanning = false;
-let isCheckScanning = false;
-let editingItem = null;
-let checkMode = 'manual';
-let scanResults = new Map();
-
-// UI要素
-const tabs = document.querySelectorAll('.tab-btn');
-const tabContents = document.querySelectorAll('.tab-content');
-const status = document.getElementById('status');
-const checkStatus = document.getElementById('check-status');
-
-// タブ切り替え
-tabs.forEach(tab => {
-  tab.addEventListener('click', () => {
-    tabs.forEach(t => {
-      t.classList.remove('bg-blue-600', 'text-white');
-      t.classList.add('text-gray-600', 'dark:text-gray-300', 'hover:bg-gray-100', 'dark:hover:bg-gray-700');
-    });
-    tab.classList.add('bg-blue-600', 'text-white');
-    tab.classList.remove('text-gray-600', 'dark:text-gray-300', 'hover:bg-gray-100', 'dark:hover:bg-gray-700');
-    
-    const target = tab.dataset.tab;
-    tabContents.forEach(tc => {
-      tc.classList.toggle('hidden', tc.id !== target);
-    });
-    
-    if (target === 'quick') {
-      updateStats();
-      renderTodayChecklist();
-    } else if (target === 'items') {
-      renderItems();
-    } else if (target === 'check') {
-      if (!currentDay) selectCurrentDay();
-      updateCheckDisplay();
-    } else if (target === 'settings') {
-      updateDetailedStats();
-    }
-  });
-});
-
-// スキャンモード切り替え
-document.querySelectorAll('.scan-mode-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.scan-mode-btn').forEach(b => {
-      b.classList.remove('bg-blue-600', 'text-white');
-      b.classList.add('text-gray-600', 'dark:text-gray-300', 'hover:bg-gray-200', 'dark:hover:bg-gray-600');
-    });
-    btn.classList.add('bg-blue-600', 'text-white');
-    btn.classList.remove('text-gray-600', 'dark:text-gray-300', 'hover:bg-gray-200', 'dark:hover:bg-gray-600');
-    
-    checkMode = btn.dataset.mode;
-    
-    if (checkMode === 'manual') {
-      document.getElementById('manual-check-mode').classList.remove('hidden');
-      document.getElementById('scan-check-mode').classList.add('hidden');
-      if (isCheckScanning) stopCheckScanning();
-    } else {
-      document.getElementById('manual-check-mode').classList.add('hidden');
-      document.getElementById('scan-check-mode').classList.remove('hidden');
-      updateCheckDisplay();
-    }
-  });
-});
-
-// 統計更新
-function updateStats() {
-  const total = items.length;
-  const checked = items.filter(i => i.checked).length;
-  const today = getTodayItems().length;
-  
-  document.getElementById('total-items').textContent = total;
-  document.getElementById('checked-items').textContent = checked;
-  document.getElementById('today-items').textContent = today;
-}
-
-function updateDetailedStats() {
-  const total = items.length;
-  const categories = [...new Set(items.map(i => i.category))].length;
-  const barcodes = items.filter(i => i.code).length;
-  const checked = items.filter(i => i.checked).length;
-  const completion = total > 0 ? Math.round((checked / total) * 100) : 0;
-  
-  document.getElementById('stat-total').textContent = total;
-  document.getElementById('stat-categories').textContent = categories;
-  document.getElementById('stat-barcodes').textContent = barcodes;
-  document.getElementById('stat-completion').textContent = completion + '%';
-}
-
-// 今日のアイテム取得
-function getTodayItems() {
-  const days = ['日', '月', '火', '水', '木', '金', '土'];
-  const today = days[new Date().getDay()];
-  return items.filter(i => i.days.includes(today));
-}
-
-// 今日のチェックリスト表示
-function renderTodayChecklist() {
-  const todayItems = getTodayItems();
-  const list = document.getElementById('today-checklist');
-  
-  if (todayItems.length === 0) {
-    list.innerHTML = '<li class="text-center text-gray-500 dark:text-gray-400 py-8">今日の予定はありません</li>';
-    return;
-  }
-  
-  list.innerHTML = '';
-  todayItems.forEach(item => {
-    const li = createItemElement(item, true);
-    list.appendChild(li);
-  });
-}
-
 // アイテム要素作成
 function createItemElement(item, isQuick = false) {
   const li = document.createElement('li');
