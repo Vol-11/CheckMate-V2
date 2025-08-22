@@ -28,6 +28,20 @@
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="js/style_config.js"></script>
 <script src="js/dark_mode_startup.js"></script>
+<style>
+    /* 頻繁に忘れるアイテムのリングアニメーション */
+    @keyframes pulse-ring {
+      0%, 100% {
+        box-shadow: 0 0 0 0 rgba(249, 115, 22, 0.4);
+      }
+      50% {
+        box-shadow: 0 0 0 4px rgba(249, 115, 22, 0);
+      }
+    }
+    .is-forgotten-frequently {
+        animation: pulse-ring 2s infinite;
+    }
+</style>
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -244,7 +258,6 @@
         <button id="check-all" class="px-3 py-1 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium transition-colors duration-200">✅ 全選択</button>
         <button id="uncheck-all" class="px-3 py-1 bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg text-sm font-medium transition-colors duration-200">⭕ 全解除</button>
         <button id="reset-check" class="px-3 py-1 bg-gray-600 hover:bg-gray-700 text-white rounded-lg text-sm font-medium transition-colors duration-200">🔄 リセット</button>
-        <button id="save-forgotten" class="px-3 py-1 bg-orange-600 hover:bg-orange-700 text-white rounded-lg text-sm font-medium transition-colors duration-200">😥 忘れ物を記録</button>
       </div>
     </div>
 
@@ -281,15 +294,32 @@
 
 <!-- 忘れ物タブ -->
 <div id="forgotten" class="tab-content hidden">
-  <div class="bg-white dark:bg-gray-800 rounded-xl p-4 sm:p-6 mb-4 shadow-md">
-    <h3 class="text-lg font-semibold mb-4 flex items-center"><span class="mr-2">😥</span>忘れ物記録</h3>
-    <div id="forgotten-stats" class="mb-4">
-      <!-- 忘れ物統計がここに表示されます -->
+    <div class="bg-white dark:bg-gray-800 rounded-xl p-4 sm:p-6 mb-4 shadow-md">
+        <div class="flex bg-gray-100 dark:bg-gray-700 rounded-lg mb-4 overflow-hidden border border-gray-300 dark:border-gray-600">
+            <button id="forgotten-record-tab-btn" class="flex-1 py-2 px-4 font-medium transition-all duration-200 bg-blue-600 text-white" data-mode="record">📝 記録</button>
+            <button id="forgotten-history-tab-btn" class="flex-1 py-2 px-4 font-medium transition-all duration-200 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600" data-mode="history">📈 履歴</button>
+        </div>
+
+        <!-- 記録モード -->
+        <div id="forgotten-record-mode">
+            <h3 class="text-lg font-semibold mb-2 flex items-center"><span class="mr-2">😥</span>今日の忘れ物</h3>
+            <p class="text-gray-600 dark:text-gray-400 mb-4">今日忘れたものにチェックを入れて、下のボタンで記録してください。</p>
+            <ul id="today-forgotten-checklist" class="space-y-3 mb-4"></ul>
+            <button id="save-today-forgotten" class="w-full py-3 bg-orange-600 hover:bg-orange-700 text-white rounded-lg font-semibold transition-colors duration-200">💾 今日の忘れ物を記録</button>
+        </div>
+
+        <!-- 履歴モード -->
+        <div id="forgotten-history-mode" class="hidden">
+            <h3 class="text-lg font-semibold mb-4 flex items-center"><span class="mr-2">📊</span>忘れ物 統計</h3>
+            <div id="forgotten-stats" class="mb-6">
+                <!-- 忘れ物統計がここに表示されます -->
+            </div>
+            <h3 class="text-lg font-semibold mb-4 flex items-center"><span class="mr-2">📜</span>忘れ物 全履歴</h3>
+            <div id="forgotten-list">
+                <!-- 忘れ物リストがここに表示されます -->
+            </div>
+        </div>
     </div>
-    <div id="forgotten-list">
-      <!-- 忘れ物リストがここに表示されます -->
-    </div>
-  </div>
 </div>
 
 <!-- 設定タブ -->
@@ -435,6 +465,7 @@
 <script src="js/sort.js"></script>
 <script src="js/search.js"></script>
 <script src="js/forgotten.js"></script>
+<script src="js/stats_util.js"></script>
 <script>
 // 詳細登録
 document.getElementById('add-detail').addEventListener('click', async () => {
@@ -776,27 +807,6 @@ document.getElementById('save-edit').addEventListener('click', async () => {
 });
 
 // 全削除（続き）
-document.getElementById('clear-items').addEventListener('click', async () => {
-  if (confirm('本当に全てのアイテムを削除しますか？\nこの操作は取り消せません。')) {
-    try {
-      await clearItems();
-      items = [];
-      renderItems();
-      renderTodayChecklist();
-      renderTomorrowChecklist()
-      updateStats();
-      document.getElementById('checklist').innerHTML = '';
-      document.getElementById('scan-checklist').innerHTML = '';
-      scanResults.clear();
-      renderScanResults();
-      showStatus('🗑 全てのアイテムを削除しました', 'success');
-    } catch (err) {
-      showStatus('削除に失敗しました: ' + err.message, 'error');
-    }
-  }
-});
-
-document.getElementById('save-forgotten').addEventListener('click', saveForgottenItems);
 
 // データ管理
 document.getElementById('export-btn').addEventListener('click', async () => {

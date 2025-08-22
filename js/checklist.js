@@ -1,12 +1,13 @@
 // チェック状況表示の統一化
-function updateCheckDisplay() {
+async function updateCheckDisplay() {
   if (!currentDay) return;
-  renderChecklist(currentDay);
-  renderScanChecklist(currentDay);
+  const forgottenStats = await getForgottenItemStats();
+  renderChecklist(currentDay, forgottenStats);
+  renderScanChecklist(currentDay, forgottenStats);
 }
 
 // 手動チェックリスト表示
-function renderChecklist(day) {
+function renderChecklist(day, forgottenStats) {
   const list = document.getElementById('checklist');
   const progress = document.getElementById('check-progress');
 
@@ -36,20 +37,14 @@ function renderChecklist(day) {
   });
 
   filtered.forEach(item => {
-    const li = createItemElement(item, true);
-    if (item.priority === '必須') {
-      li.style.borderColor = '#dc2626';
-      li.classList.add('ring-2', 'ring-red-200', 'dark:ring-red-800');
-    } else if (item.priority === '重要') {
-      li.style.borderColor = '#eab308';
-      li.classList.add('ring-2', 'ring-yellow-200', 'dark:ring-yellow-800');
-    }
+    // ★修正点: forgottenStatsを渡す
+    const li = createItemElement(item, true, forgottenStats);
     list.appendChild(li);
   });
 }
 
 // スキャンモード用チェックリスト表示
-function renderScanChecklist(day) {
+function renderScanChecklist(day, forgottenStats) {
   const list = document.getElementById('scan-checklist');
   const progress = document.getElementById('scan-check-progress');
 
@@ -79,14 +74,8 @@ function renderScanChecklist(day) {
   });
 
   filtered.forEach(item => {
-    const li = createItemElement(item, true);
-    if (item.priority === '必須') {
-      li.style.borderColor = '#dc2626';
-      li.classList.add('ring-2', 'ring-red-200', 'dark:ring-red-800');
-    } else if (item.priority === '重要') {
-      li.style.borderColor = '#eab308';
-      li.classList.add('ring-2', 'ring-yellow-200', 'dark:ring-yellow-800');
-    }
+    // ★修正点: forgottenStatsを渡す
+    const li = createItemElement(item, true, forgottenStats);
     list.appendChild(li);
   });
 }
@@ -183,9 +172,10 @@ async function performResetCheck() {
 }
 
 // 今日のチェックリスト表示
-function renderTodayChecklist() {
+async function renderTodayChecklist() {
   const todayItems = getTodayItems();
   const list = document.getElementById('today-checklist');
+  const forgottenStats = await getForgottenItemStats();
 
   if (todayItems.length === 0) {
     list.innerHTML = '<li class="text-center text-gray-500 dark:text-gray-400 py-8">今日の予定はありません</li>';
@@ -194,15 +184,16 @@ function renderTodayChecklist() {
 
   list.innerHTML = '';
   todayItems.forEach(item => {
-    const li = createItemElement(item, true);
+    const li = createItemElement(item, true, forgottenStats);
     list.appendChild(li);
   });
 }
 
 // 明日のチェックリスト表示
-function renderTomorrowChecklist() {
+async function renderTomorrowChecklist() {
     const tomorrowItems = getTomorrowItems();
     const list = document.getElementById('tomorrow-checklist');
+    const forgottenStats = await getForgottenItemStats();
 
     if (tomorrowItems.length === 0) {
         list.innerHTML = '<li class="text-center text-gray-500 dark:text-gray-400 py-8">明日の予定はありません</li>';
@@ -211,34 +202,9 @@ function renderTomorrowChecklist() {
 
     list.innerHTML = '';
     tomorrowItems.forEach(item => {
-        const li = createItemElement(item, true);
+        const li = createItemElement(item, true, forgottenStats);
         list.appendChild(li);
     });
 }
 
-// 忘れ物を記録する (新規)
-async function saveForgottenItems() {
-  const dayItems = items.filter(i => i.days.includes(currentDay));
-  const forgottenItems = dayItems.filter(i => !i.checked);
 
-  if (forgottenItems.length === 0) {
-    showStatus('✅ 今日の忘れ物はありませんでした！', 'success');
-    return;
-  }
-
-  const forgottenItemIds = forgottenItems.map(i => i.id);
-  const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
-
-  const record = {
-    date: today,
-    forgottenItems: forgottenItemIds
-  };
-
-  try {
-    await addForgottenRecord(record);
-    showStatus(`😥 ${forgottenItems.length}件の忘れ物を記録しました`, 'info');
-  } catch (err) {
-    console.error('Failed to save forgotten items:', err);
-    showStatus(`❌ 記録に失敗しました: ${err.message}`, 'error');
-  }
-}

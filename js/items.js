@@ -9,20 +9,36 @@ function getTodayItems() {
 function getTomorrowItems() {
   const days = ['日', '月', '火', '水', '木', '金', '土'];
   const todayIndex = new Date().getDay();
-  const tomorrowIndex = (todayIndex + 1) % 7; // 土曜の次は日曜になる
+  const tomorrowIndex = (todayIndex + 1) % 7;
   const tomorrow = days[tomorrowIndex];
   return items.filter(i => i.days.includes(tomorrow));
 }
 
 // アイテム要素作成
-function createItemElement(item, isQuick = false) {
+function createItemElement(item, isQuick = false, forgottenStats = { counts: {}, total: 0 }) {
   const li = document.createElement('li');
-  li.className = `flex items-center justify-between p-3 border-2 rounded-lg transition-all duration-200 ${
-    item.checked 
-      ? 'bg-gradient-to-r from-green-50 to-green-100 dark:from-green-900/30 dark:to-green-800/30 border-green-500' 
-      : 'bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 hover:border-blue-300 dark:hover:border-blue-500'
-  }`;
+  const forgotten_count = forgottenStats.counts[item.id] || 0;
+
+  // Base classes
+  li.className = `item-element flex items-center justify-between p-3 border-2 rounded-lg transition-all duration-200`;
   li.dataset.id = item.id;
+
+  // Checked state classes
+  if (item.checked) {
+    li.classList.add('bg-gradient-to-r', 'from-green-50', 'to-green-100', 'dark:from-green-900/30', 'dark:to-green-800/30', 'border-green-500');
+  } else {
+    li.classList.add('bg-white', 'dark:bg-gray-700', 'border-gray-300', 'dark:border-gray-600', 'hover:border-blue-400', 'dark:hover:border-blue-500');
+  }
+
+  // Forgotten item highlighting
+  if (forgotten_count > 0) {
+    li.classList.add('is-forgotten');
+    if (forgotten_count >= 3) {
+        li.classList.add('is-forgotten-frequently', 'border-orange-400', 'dark:border-orange-500', 'ring-2', 'ring-orange-200', 'dark:ring-orange-800/50');
+    } else {
+        li.classList.add('border-yellow-400', 'dark:border-yellow-500');
+    }
+  }
 
   // --- Main clickable area (checkbox + info) ---
   const clickableArea = document.createElement('div');
@@ -34,7 +50,7 @@ function createItemElement(item, isQuick = false) {
   checkbox.checked = !!item.checked;
   
   const info = document.createElement('div');
-  info.className = 'flex-1 ml-3'; // Add margin left to space from checkbox
+  info.className = 'flex-1 ml-3';
 
   let priorityIcon = '';
   if (item.priority === '重要') priorityIcon = '⭐ ';
@@ -50,6 +66,21 @@ function createItemElement(item, isQuick = false) {
       ${item.memo ? `<br><small class="text-gray-500 dark:text-gray-400">${item.memo}</small>` : ''}
     </div>
   `;
+  
+  // BUG FIX: Append warning icon AFTER info div is created and populated
+  if (forgotten_count > 0) {
+    const forgottenBadge = document.createElement('span');
+    forgottenBadge.className = 'forgotten-badge ml-2 px-2 py-0.5 rounded-full text-xs font-semibold';
+    if (forgotten_count >= 3) {
+        forgottenBadge.classList.add('bg-orange-500', 'text-white');
+        forgottenBadge.textContent = `忘れやすい (${forgotten_count}回)`;
+    } else {
+        forgottenBadge.classList.add('bg-yellow-400', 'text-gray-800');
+        forgottenBadge.textContent = `忘れ物あり (${forgotten_count}回)`;
+    }
+    // Append to the first line (the one with the name)
+    info.querySelector('.font-semibold').appendChild(forgottenBadge);
+  }
 
   clickableArea.appendChild(checkbox);
   clickableArea.appendChild(info);
@@ -58,13 +89,13 @@ function createItemElement(item, isQuick = false) {
   // --- Action buttons ---
   if (!isQuick) {
     const actions = document.createElement('div');
-    actions.className = 'flex-shrink-0 flex gap-2 ml-3'; // flex-shrink-0 prevents shrinking
+    actions.className = 'flex-shrink-0 flex gap-2 ml-3';
 
     const editBtn = document.createElement('button');
     editBtn.textContent = '✏️';
     editBtn.className = 'px-2 py-1 bg-cyan-600 hover:bg-cyan-700 text-white rounded text-sm transition-colors duration-200';
     editBtn.addEventListener('click', (e) => {
-      e.stopPropagation(); // Prevent li click event
+      e.stopPropagation();
       openEditModal(item);
     });
 
@@ -72,7 +103,7 @@ function createItemElement(item, isQuick = false) {
     deleteBtn.textContent = '🗑';
     deleteBtn.className = 'px-2 py-1 bg-red-600 hover:bg-red-700 text-white rounded text-sm transition-colors duration-200';
     deleteBtn.addEventListener('click', async (e) => {
-      e.stopPropagation(); // Prevent li click event
+      e.stopPropagation();
       if (confirm(`「${item.name}」を削除しますか？`)) {
         await deleteItem(item.id);
         items = items.filter(i => i.id !== item.id);
@@ -93,9 +124,12 @@ function createItemElement(item, isQuick = false) {
     item.checked = checkbox.checked;
     await updateItem(item);
     updateStats();
-    updateCheckDisplay();
-    if (!isQuick) renderItems();
-    if (isQuick) renderTodayChecklist() || renderTomorrowChecklist();
+    updateCheckDisplay(); // This will re-render the checklist with new stats
+    if (!isQuick) renderItems(); // This will re-render the item list
+    if (isQuick) {
+        renderTodayChecklist();
+        renderTomorrowChecklist();
+    }
 
     if (checkbox.checked && navigator.vibrate) {
       navigator.vibrate([100, 50, 100]);
@@ -105,7 +139,6 @@ function createItemElement(item, isQuick = false) {
   checkbox.addEventListener('change', handleCheck);
 
   clickableArea.addEventListener('click', (e) => {
-    // Only toggle if the click is not on the checkbox itself
     if (e.target !== checkbox) {
       checkbox.checked = !checkbox.checked;
       handleCheck();
@@ -116,9 +149,10 @@ function createItemElement(item, isQuick = false) {
 }
 
 // アイテム一覧表示
-function renderItems() {
+async function renderItems() {
   const list = document.getElementById('items-list');
   const title = document.getElementById('items-title');
+  const forgottenStats = await getForgottenItemStats();
 
   let filtered = items;
 
@@ -156,7 +190,7 @@ function renderItems() {
 
   list.innerHTML = '';
   filtered.forEach(item => {
-    const li = createItemElement(item, false);
+    const li = createItemElement(item, false, forgottenStats);
     list.appendChild(li);
   });
 }
@@ -166,21 +200,18 @@ function renderCategoryFilterButtons() {
   const tabs = document.getElementById('category-tabs');
   if (!tabs) return;
 
-  // 「全て」ボタン以外の既存のボタンを削除
   const existingButtons = tabs.querySelectorAll('.category-btn:not([data-category="all"])');
   existingButtons.forEach(btn => btn.remove());
 
-  // グローバル変数からボタンを生成
   categories.forEach(category => {
     const button = document.createElement('button');
     button.className = 'category-btn px-3 py-1 border-2 border-blue-600 text-blue-600 dark:text-blue-400 bg-white dark:bg-gray-800 hover:bg-blue-50 dark:hover:bg-gray-700 rounded-full text-sm font-medium transition-all duration-200';
     button.dataset.category = category.name;
     
     const icon = getCategoryIcon(category.name);
-    // ボタンのテキストが長くなりすぎないように調整
     const shortName = category.name.length > 3 ? category.name.substring(0, 3) : category.name;
     button.innerHTML = `${icon} ${shortName}`;
-    button.title = category.name; // フルネームはツールチップで表示
+    button.title = category.name;
 
     tabs.appendChild(button);
   });
