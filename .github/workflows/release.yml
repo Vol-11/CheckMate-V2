@@ -19,16 +19,16 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Extract version from commit message or increment by 16
+      - name: Extract version from commit message or increment by 1 (hex)
         id: get_version
         run: |
           commit_msg="${{ github.event.head_commit.message }}"
           first_line=$(echo "$commit_msg" | head -n1)
           
-          # コミットメッセージの最初の行からvx.x.xまたはx.x.xを抽出
-          if echo "$first_line" | grep -qE '^v?[0-9]+\.[0-9]+\.[0-9]+'; then
+          # コミットメッセージの最初の行からvx.x.xを抽出（16進数対応）
+          if echo "$first_line" | grep -qE '^v?[0-9a-f]+\.[0-9a-f]+\.[0-9a-f]+'; then
             # バージョンが見つかった場合
-            version=$(echo "$first_line" | grep -oE '^v?[0-9]+\.[0-9]+\.[0-9]+')
+            version=$(echo "$first_line" | grep -oE '^v?[0-9a-f]+\.[0-9a-f]+\.[0-9a-f]+')
             # vがなければ追加
             if [[ ! "$version" =~ ^v ]]; then
               version="v$version"
@@ -37,34 +37,40 @@ jobs:
             echo "from_commit=true" >> $GITHUB_OUTPUT
             echo "Found version in commit message: $version"
           else
-            # バージョンが見つからなかった場合、既存タグから16進数で繰り上げ
-            prev=$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' | sort -V | tail -n1)
+            # バージョンが見つからなかった場合、既存タグから16進数で1つ繰り上げ
+            prev=$(git tag -l 'v[0-9a-f]*.[0-9a-f]*.[0-9a-f]*' | sort -V | tail -n1)
             if [ -z "$prev" ]; then
-              new_tag="v0.1.0"
+              new_tag="v0.0.0"
             else
-              # vX.Y.Z を数値に分解
+              # vX.Y.Z を16進数として処理
               vers=${prev#v}
               IFS='.' read -r MA MI PA <<< "$vers"
               
-              # パッチバージョンに16を足す（16進数での増加）
-              PA=$((PA + 16))
+              # 16進数を10進数に変換
+              ma_dec=$((16#$MA))
+              mi_dec=$((16#$MI))
+              pa_dec=$((16#$PA))
               
-              # 16進数の桁上がり処理（16で桁上がり）
-              if [ $PA -ge 16 ]; then
-                MI=$((MI + PA / 16))
-                PA=$((PA % 16))
+              # パッチバージョンに1を足す
+              pa_dec=$((pa_dec + 1))
+              
+              # 16進数の桁上がり処理
+              if [ $pa_dec -ge 16 ]; then
+                mi_dec=$((mi_dec + pa_dec / 16))
+                pa_dec=$((pa_dec % 16))
               fi
               
-              if [ $MI -ge 16 ]; then
-                MA=$((MA + MI / 16))
-                MI=$((MI % 16))
+              if [ $mi_dec -ge 16 ]; then
+                ma_dec=$((ma_dec + mi_dec / 16))
+                mi_dec=$((mi_dec % 16))
               fi
               
-              new_tag="v${MA}.${MI}.${PA}"
+              # 10進数を16進数に変換して出力
+              new_tag=$(printf "v%x.%x.%x" $ma_dec $mi_dec $pa_dec)
             fi
             echo "new_tag=$new_tag" >> $GITHUB_OUTPUT
             echo "from_commit=false" >> $GITHUB_OUTPUT
-            echo "Incremented version by 16: $new_tag (from $prev)"
+            echo "Incremented version by 1 (hex): $new_tag (from $prev)"
           fi
 
       - name: Check if tag already exists
@@ -88,7 +94,7 @@ jobs:
           if [ "${{ steps.get_version.outputs.from_commit }}" == "true" ]; then
             git tag -a "$new_tag" -m "Release $new_tag (from commit message)"
           else
-            git tag -a "$new_tag" -m "Release $new_tag (auto-incremented by 16)"
+            git tag -a "$new_tag" -m "Release $new_tag (auto-incremented hex)"
           fi
           
           git push origin "$new_tag"
