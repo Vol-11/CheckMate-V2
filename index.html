@@ -213,15 +213,10 @@
 <!-- チェックタブ -->
 <div id="check" class="tab-content">
   <div class="bg-white dark:bg-gray-800 rounded-xl p-4 sm:p-6 mb-4 shadow-md">
-    <h3 class="text-lg font-semibold mb-4 flex items-center"><span class="mr-2">✅</span>曜日別チェックリスト</h3>
-    <div class="grid grid-cols-4 sm:grid-cols-7 gap-2 mb-4" id="preset-days">
-      <button class="preset-btn py-2 border-2 border-blue-600 text-blue-600 dark:text-blue-400 bg-white dark:bg-gray-800 hover:bg-blue-50 dark:hover:bg-gray-700 rounded-lg font-medium transition-all duration-200 text-center" data-day="月">月</button>
-      <button class="preset-btn py-2 border-2 border-blue-600 text-blue-600 dark:text-blue-400 bg-white dark:bg-gray-800 hover:bg-blue-50 dark:hover:bg-gray-700 rounded-lg font-medium transition-all duration-200 text-center" data-day="火">火</button>
-      <button class="preset-btn py-2 border-2 border-blue-600 text-blue-600 dark:text-blue-400 bg-white dark:bg-gray-800 hover:bg-blue-50 dark:hover:bg-gray-700 rounded-lg font-medium transition-all duration-200 text-center" data-day="水">水</button>
-      <button class="preset-btn py-2 border-2 border-blue-600 text-blue-600 dark:text-blue-400 bg-white dark:bg-gray-800 hover:bg-blue-50 dark:hover:bg-gray-700 rounded-lg font-medium transition-all duration-200 text-center" data-day="木">木</button>
-      <button class="preset-btn py-2 border-2 border-blue-600 text-blue-600 dark:text-blue-400 bg-white dark:bg-gray-800 hover:bg-blue-50 dark:hover:bg-gray-700 rounded-lg font-medium transition-all duration-200 text-center" data-day="金">金</button>
-      <button class="preset-btn py-2 border-2 border-blue-600 text-blue-600 dark:text-blue-400 bg-white dark:bg-gray-800 hover:bg-blue-50 dark:hover:bg-gray-700 rounded-lg font-medium transition-all duration-200 text-center" data-day="土">土</button>
-      <button class="preset-btn py-2 border-2 border-blue-600 text-blue-600 dark:text-blue-400 bg-white dark:bg-gray-800 hover:bg-blue-50 dark:hover:bg-gray-700 rounded-lg font-medium transition-all duration-200 text-center" data-day="日">日</button>
+    <h3 class="text-lg font-semibold mb-4 flex items-center"><span class="mr-2">✅</span>日付を選択してチェック</h3>
+    <div class="flex items-center gap-4 mb-4">
+        <label for="check-date-picker" class="font-medium">日付:</label>
+        <input type="date" id="check-date-picker" class="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white">
     </div>
   </div>
 
