@@ -135,8 +135,6 @@ async function performCheckAll() {
   }
   updateCheckDisplay();
   updateStats();
-  renderTodayChecklist();
-  renderTomorrowChecklist()
   if (navigator.vibrate) navigator.vibrate([100, 50, 100, 50, 100]);
 }
 
@@ -150,8 +148,6 @@ async function performUncheckAll() {
   }
   updateCheckDisplay();
   updateStats();
-  renderTodayChecklist();
-  renderTomorrowChecklist()
 }
 
 async function performResetCheck() {
@@ -162,49 +158,11 @@ async function performResetCheck() {
     }
     renderItems();
     updateCheckDisplay();
-    renderTodayChecklist();
-    renderTomorrowChecklist()
     updateStats();
     scanResults.clear();
     renderScanResults();
     showStatus('🔄 チェック状態をリセットしました', 'success');
   }
-}
-
-// 今日のチェックリスト表示
-async function renderTodayChecklist() {
-  const todayItems = getTodayItems();
-  const list = document.getElementById('today-checklist');
-  const forgottenStats = await getForgottenItemStats();
-
-  if (todayItems.length === 0) {
-    list.innerHTML = '<li class="text-center text-gray-500 dark:text-gray-400 py-8">今日の予定はありません</li>';
-    return;
-  }
-
-  list.innerHTML = '';
-  todayItems.forEach(item => {
-    const li = createItemElement(item, true, forgottenStats);
-    list.appendChild(li);
-  });
-}
-
-// 明日のチェックリスト表示
-async function renderTomorrowChecklist() {
-    const tomorrowItems = getTomorrowItems();
-    const list = document.getElementById('tomorrow-checklist');
-    const forgottenStats = await getForgottenItemStats();
-
-    if (tomorrowItems.length === 0) {
-        list.innerHTML = '<li class="text-center text-gray-500 dark:text-gray-400 py-8">明日の予定はありません</li>';
-        return;
-    }
-
-    list.innerHTML = '';
-    tomorrowItems.forEach(item => {
-        const li = createItemElement(item, true, forgottenStats);
-        list.appendChild(li);
-    });
 }
 
 

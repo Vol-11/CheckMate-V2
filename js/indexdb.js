@@ -1,9 +1,10 @@
 // IndexedDB設定
 const DB_NAME = 'wasuremonoPro';
-const DB_VERSION = 5; // DBバージョンを更新
+const DB_VERSION = 6; // DBバージョンを更新
 const ITEMS_STORE_NAME = 'items';
 const CATEGORIES_STORE_NAME = 'categories';
 const FORGOTTEN_RECORDS_STORE_NAME = 'forgotten_records';
+const DATE_OVERRIDES_STORE_NAME = 'date_overrides'; // New store
 let db;
 
 function openDB() {
@@ -26,11 +27,14 @@ function openDB() {
         categoryStore.createIndex('name', 'name', { unique: true });
       }
       // 忘れ物記録ストア (dateをキーにする)
-      if (db.objectStoreNames.contains(FORGOTTEN_RECORDS_STORE_NAME)) {
-          db.deleteObjectStore(FORGOTTEN_RECORDS_STORE_NAME);
+      if (!db.objectStoreNames.contains(FORGOTTEN_RECORDS_STORE_NAME)) {
+          const forgottenStore = db.createObjectStore(FORGOTTEN_RECORDS_STORE_NAME, { keyPath: 'date' });
+          forgottenStore.createIndex('date_idx', 'date', { unique: true });
       }
-      const forgottenStore = db.createObjectStore(FORGOTTEN_RECORDS_STORE_NAME, { keyPath: 'date' });
-      forgottenStore.createIndex('date_idx', 'date', { unique: true });
+      // 日付オーバーライドストア (dateをキーにする)
+      if (!db.objectStoreNames.contains(DATE_OVERRIDES_STORE_NAME)) {
+        db.createObjectStore(DATE_OVERRIDES_STORE_NAME, { keyPath: 'date' });
+      }
     };
   });
 }
@@ -184,5 +188,26 @@ function deleteForgottenRecordsBefore(date) {
     };
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
+  });
+}
+
+// 日付オーバーライド CRUD操作
+function getOverride(date) {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(DATE_OVERRIDES_STORE_NAME, 'readonly');
+    const store = tx.objectStore(DATE_OVERRIDES_STORE_NAME);
+    const request = store.get(date);
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+function saveOverride(override) {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(DATE_OVERRIDES_STORE_NAME, 'readwrite');
+    const store = tx.objectStore(DATE_OVERRIDES_STORE_NAME);
+    const request = store.put(override);
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error);
   });
 }

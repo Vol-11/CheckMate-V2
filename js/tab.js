@@ -16,11 +16,7 @@ tabs.forEach(tab => {
     const event = new CustomEvent('tabChanged', { detail: { tab: target } });
     document.dispatchEvent(event);
 
-    if (target === 'quick') {
-      updateStats();
-      renderTodayChecklist();
-      renderTomorrowChecklist();
-    } else if (target === 'items') {
+    if (target === 'items') {
       renderItems();
     } else if (target === 'check') {
       if (!currentDay) selectCurrentDay();
