@@ -13,6 +13,9 @@ tabs.forEach(tab => {
       tc.classList.toggle('hidden', tc.id !== target);
     });
 
+    const event = new CustomEvent('tabChanged', { detail: { tab: target } });
+    document.dispatchEvent(event);
+
     if (target === 'quick') {
       updateStats();
       renderTodayChecklist();

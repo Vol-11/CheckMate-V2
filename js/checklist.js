@@ -215,3 +215,30 @@ function renderTomorrowChecklist() {
         list.appendChild(li);
     });
 }
+
+// 忘れ物を記録する (新規)
+async function saveForgottenItems() {
+  const dayItems = items.filter(i => i.days.includes(currentDay));
+  const forgottenItems = dayItems.filter(i => !i.checked);
+
+  if (forgottenItems.length === 0) {
+    showStatus('✅ 今日の忘れ物はありませんでした！', 'success');
+    return;
+  }
+
+  const forgottenItemIds = forgottenItems.map(i => i.id);
+  const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+
+  const record = {
+    date: today,
+    forgottenItems: forgottenItemIds
+  };
+
+  try {
+    await addForgottenRecord(record);
+    showStatus(`😥 ${forgottenItems.length}件の忘れ物を記録しました`, 'info');
+  } catch (err) {
+    console.error('Failed to save forgotten items:', err);
+    showStatus(`❌ 記録に失敗しました: ${err.message}`, 'error');
+  }
+}

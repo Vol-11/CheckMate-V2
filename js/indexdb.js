@@ -1,8 +1,9 @@
 // IndexedDB設定
 const DB_NAME = 'wasuremonoPro';
-const DB_VERSION = 3; // DBバージョンを更新
+const DB_VERSION = 4; // DBバージョンを更新
 const ITEMS_STORE_NAME = 'items';
 const CATEGORIES_STORE_NAME = 'categories';
+const FORGOTTEN_RECORDS_STORE_NAME = 'forgotten_records'; // 新規
 let db;
 
 function openDB() {
@@ -23,6 +24,11 @@ function openDB() {
       if (!db.objectStoreNames.contains(CATEGORIES_STORE_NAME)) {
         const store = db.createObjectStore(CATEGORIES_STORE_NAME, { keyPath: 'id' });
         store.createIndex('name', 'name', { unique: true });
+      }
+      // 忘れ物記録ストア (新規)
+      if (!db.objectStoreNames.contains(FORGOTTEN_RECORDS_STORE_NAME)) {
+        const store = db.createObjectStore(FORGOTTEN_RECORDS_STORE_NAME, { keyPath: 'id', autoIncrement: true });
+        store.createIndex('date', 'date', { unique: true });
       }
     };
   });
@@ -118,4 +124,26 @@ function clearCategories() {
         request.onsuccess = () => resolve();
         request.onerror = () => reject(request.error);
     });
+}
+
+// 忘れ物記録 CRUD操作 (新規)
+function addForgottenRecord(record) {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(FORGOTTEN_RECORDS_STORE_NAME, 'readwrite');
+    const store = tx.objectStore(FORGOTTEN_RECORDS_STORE_NAME);
+    // 同じ日付のデータがあれば上書き、なければ追加
+    const request = store.put(record);
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+function getAllForgottenRecords() {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(FORGOTTEN_RECORDS_STORE_NAME, 'readonly');
+    const store = tx.objectStore(FORGOTTEN_RECORDS_STORE_NAME);
+    const request = store.getAll();
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
 }

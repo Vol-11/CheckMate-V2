@@ -67,6 +67,7 @@
   <button class="tab-btn flex-1 py-3 px-2 text-xs sm:text-sm font-medium transition-all duration-200 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700" data-tab="scanner">📱 登録</button>
   <button class="tab-btn flex-1 py-3 px-2 text-xs sm:text-sm font-medium transition-all duration-200 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700" data-tab="items">📋 一覧</button>
   <button class="tab-btn flex-1 py-3 px-2 text-xs sm:text-sm font-medium transition-all duration-200 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700" data-tab="check">✅ チェック</button>
+  <button class="tab-btn flex-1 py-3 px-2 text-xs sm:text-sm font-medium transition-all duration-200 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700" data-tab="forgotten">😥 忘れ物</button>
   <button class="tab-btn flex-1 py-3 px-2 text-xs sm:text-sm font-medium transition-all duration-200 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700" data-tab="settings">⚙️ 設定</button>
 </nav>
 
@@ -243,6 +244,7 @@
         <button id="check-all" class="px-3 py-1 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium transition-colors duration-200">✅ 全選択</button>
         <button id="uncheck-all" class="px-3 py-1 bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg text-sm font-medium transition-colors duration-200">⭕ 全解除</button>
         <button id="reset-check" class="px-3 py-1 bg-gray-600 hover:bg-gray-700 text-white rounded-lg text-sm font-medium transition-colors duration-200">🔄 リセット</button>
+        <button id="save-forgotten" class="px-3 py-1 bg-orange-600 hover:bg-orange-700 text-white rounded-lg text-sm font-medium transition-colors duration-200">😥 忘れ物を記録</button>
       </div>
     </div>
 
@@ -273,6 +275,19 @@
         <h4 class="text-lg font-semibold mb-3">📊 スキャン結果</h4>
         <ul id="scan-results" class="space-y-2"></ul>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- 忘れ物タブ -->
+<div id="forgotten" class="tab-content hidden">
+  <div class="bg-white dark:bg-gray-800 rounded-xl p-4 sm:p-6 mb-4 shadow-md">
+    <h3 class="text-lg font-semibold mb-4 flex items-center"><span class="mr-2">😥</span>忘れ物記録</h3>
+    <div id="forgotten-stats" class="mb-4">
+      <!-- 忘れ物統計がここに表示されます -->
+    </div>
+    <div id="forgotten-list">
+      <!-- 忘れ物リストがここに表示されます -->
     </div>
   </div>
 </div>
@@ -419,6 +434,7 @@
 <script src="js/pwa.js"></script>
 <script src="js/sort.js"></script>
 <script src="js/search.js"></script>
+<script src="js/forgotten.js"></script>
 <script>
 // 詳細登録
 document.getElementById('add-detail').addEventListener('click', async () => {
@@ -779,6 +795,8 @@ document.getElementById('clear-items').addEventListener('click', async () => {
     }
   }
 });
+
+document.getElementById('save-forgotten').addEventListener('click', saveForgottenItems);
 
 // データ管理
 document.getElementById('export-btn').addEventListener('click', async () => {
