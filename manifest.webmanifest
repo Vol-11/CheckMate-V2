@@ -1,7 +1,7 @@
 {
-  "name": "忘れ物防止システム Pro",
-  "short_name": "忘れ物Pro",
-  "description": "教材・持ち物を統合管理する忘れ物防止システム",
+  "name": "CheckMate v2",
+  "short_name": "CheckMate v2",
+  "description": "日々の持ち物を管理し、忘れ物を防止するためのチェックリストPWAです。",
   /* GitHub Pages の URL に合わせる
      username.github.io/CheckMate-V2/ で公開している場合 */
   "start_url": "/CheckMate-V2/",

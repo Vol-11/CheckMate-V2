@@ -797,7 +797,7 @@ document.getElementById('export-btn').addEventListener('click', async () => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `忘れ物防止Pro_${new Date().toISOString().split('T')[0]}.json`;
+    a.download = `CheckMate_v2_${new Date().toISOString().split('T')[0]}.json`;
     a.click();
     URL.revokeObjectURL(url);
     showStatus('✅ データをエクスポートしました', 'success');
