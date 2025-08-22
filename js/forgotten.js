@@ -1,11 +1,11 @@
-// DOM要素のキャッシュ
-const recordTabBtn = document.getElementById('forgotten-record-tab-btn');
-const historyTabBtn = document.getElementById('forgotten-history-tab-btn');
-const recordModeDiv = document.getElementById('forgotten-record-mode');
-const historyModeDiv = document.getElementById('forgotten-history-mode');
-const saveBtn = document.getElementById('save-today-forgotten');
-const todayChecklist = document.getElementById('today-forgotten-checklist');
-const forgottenListEl = document.getElementById('forgotten-list');
+// DOM要素のキャッシュ (宣言のみ)
+let recordTabBtn;
+let historyTabBtn;
+let recordModeDiv;
+let historyModeDiv;
+let saveBtn;
+let todayChecklist;
+let forgottenListEl;
 
 function switchForgottenMode(mode) {
   if (mode === 'record') {
@@ -240,10 +240,21 @@ function initializeForgottenTab() {
   });
 }
 
-document.addEventListener('tabChanged', (e) => {
-  if (e.detail.tab === 'forgotten') {
-    switchForgottenMode('record');
-  }
-});
+document.addEventListener('DOMContentLoaded', () => {
+    // DOM要素のキャッシュ
+    recordTabBtn = document.getElementById('forgotten-record-tab-btn');
+    historyTabBtn = document.getElementById('forgotten-history-tab-btn');
+    recordModeDiv = document.getElementById('forgotten-record-mode');
+    historyModeDiv = document.getElementById('forgotten-history-mode');
+    saveBtn = document.getElementById('save-today-forgotten');
+    todayChecklist = document.getElementById('today-forgotten-checklist');
+    forgottenListEl = document.getElementById('forgotten-list');
 
-initializeForgottenTab();
+    initializeForgottenTab();
+
+    document.addEventListener('tabChanged', (e) => {
+        if (e.detail.tab === 'forgotten') {
+            switchForgottenMode('record');
+        }
+    });
+});
