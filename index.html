@@ -395,6 +395,8 @@
 <script src="js/checklist.js"></script>
 <script src="js/category.js"></script>
 <script src="js/quick.js"></script>
+<script src="js/backup.js"></script>
+<script src="js/pwa.js"></script>
 <script>
 // 詳細登録
 document.getElementById('add-detail').addEventListener('click', async () => {
@@ -998,47 +1000,7 @@ document.getElementById('import-file').addEventListener('change', async e => {
   e.target.value = '';
 });
 
-// バックアップ・復元
-document.getElementById('backup-btn').addEventListener('click', async () => {
-  try {
-    const allItems = await getAllItems();
-    localStorage.setItem('wasuremono-backup', JSON.stringify({
-      items: allItems,
-      backupAt: new Date().toISOString()
-    }));
-    showStatus('💾 バックアップを作成しました', 'success');
-  } catch (err) {
-    showStatus('バックアップに失敗しました: ' + err.message, 'error');
-  }
-});
 
-document.getElementById('restore-btn').addEventListener('click', async () => {
-  try {
-    const backup = localStorage.getItem('wasuremono-backup');
-    if (!backup) {
-      showStatus('バックアップが見つかりません', 'warning');
-      return;
-    }
-    
-    const data = JSON.parse(backup);
-    if (confirm(`バックアップ（${new Date(data.backupAt).toLocaleString()}）から復元しますか？\n現在のデータは削除されます。`)) {
-      await clearItems();
-      
-      for (const item of data.items) {
-        delete item.id;
-        await addItem(item);
-      }
-      
-      await loadItems();
-      updateDetailedStats();  // 統計情報も更新
-      scanResults.clear();
-      renderScanResults();
-      showStatus('🔄 バックアップから復元しました', 'success');
-    }
-  } catch (err) {
-    showStatus('復元に失敗しました: ' + err.message, 'error');
-  }
-});
 
 // データ読み込み
 async function loadItems() {
@@ -1052,34 +1014,6 @@ async function loadItems() {
     console.error('Load items failed:', err);
   }
 }
-
-// PWAインストール
-let deferredPrompt;
-const installBtn = document.getElementById('install-pwa');
-
-window.addEventListener('beforeinstallprompt', (e) => {
-  e.preventDefault();
-  deferredPrompt = e;
-  installBtn.classList.remove('hidden');
-});
-
-installBtn.addEventListener('click', async () => {
-  if (!deferredPrompt) {
-    showStatus('このブラウザではPWAインストールがサポートされていません', 'warning');
-    return;
-  }
-  
-  deferredPrompt.prompt();
-  const { outcome } = await deferredPrompt.userChoice;
-  
-  if (outcome === 'accepted') {
-    installBtn.classList.add('hidden');
-    showStatus('📱 PWAがインストールされました', 'success');
-  }
-  
-  deferredPrompt = null;
-});
-
 // 初期化
 openDB().then(async () => {
   await loadItems();
