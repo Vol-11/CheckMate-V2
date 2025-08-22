@@ -154,14 +154,14 @@
     
     <div class="mb-6">
       <label class="block text-sm font-medium mb-2">必要な曜日</label>
-      <div class="grid grid-cols-4 sm:grid-cols-7 gap-2">
-        <label class="flex items-center space-x-1"><input type="checkbox" value="月" class="rounded text-blue-600 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600"> <span class="text-sm">月</span></label>
-        <label class="flex items-center space-x-1"><input type="checkbox" value="火" class="rounded text-blue-600 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600"> <span class="text-sm">火</span></label>
-        <label class="flex items-center space-x-1"><input type="checkbox" value="水" class="rounded text-blue-600 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600"> <span class="text-sm">水</span></label>
-        <label class="flex items-center space-x-1"><input type="checkbox" value="木" class="rounded text-blue-600 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600"> <span class="text-sm">木</span></label>
-        <label class="flex items-center space-x-1"><input type="checkbox" value="金" class="rounded text-blue-600 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600"> <span class="text-sm">金</span></label>
-        <label class="flex items-center space-x-1"><input type="checkbox" value="土" class="rounded text-blue-600 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600"> <span class="text-sm">土</span></label>
-        <label class="flex items-center space-x-1"><input type="checkbox" value="日" class="rounded text-blue-600 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600"> <span class="text-sm">日</span></label>
+      <div class="grid grid-cols-4 sm:grid-cols-7 gap-2" id="detail-days">
+        <label><input type="checkbox" value="月" class="sr-only peer"><div class="cursor-pointer text-center p-2 border rounded-lg transition-colors peer-checked:bg-blue-600 peer-checked:text-white peer-checked:border-blue-600 dark:border-gray-600 dark:peer-checked:border-blue-600 hover:bg-gray-100 dark:hover:bg-gray-700">月</div></label>
+        <label><input type="checkbox" value="火" class="sr-only peer"><div class="cursor-pointer text-center p-2 border rounded-lg transition-colors peer-checked:bg-blue-600 peer-checked:text-white peer-checked:border-blue-600 dark:border-gray-600 dark:peer-checked:border-blue-600 hover:bg-gray-100 dark:hover:bg-gray-700">火</div></label>
+        <label><input type="checkbox" value="水" class="sr-only peer"><div class="cursor-pointer text-center p-2 border rounded-lg transition-colors peer-checked:bg-blue-600 peer-checked:text-white peer-checked:border-blue-600 dark:border-gray-600 dark:peer-checked:border-blue-600 hover:bg-gray-100 dark:hover:bg-gray-700">水</div></label>
+        <label><input type="checkbox" value="木" class="sr-only peer"><div class="cursor-pointer text-center p-2 border rounded-lg transition-colors peer-checked:bg-blue-600 peer-checked:text-white peer-checked:border-blue-600 dark:border-gray-600 dark:peer-checked:border-blue-600 hover:bg-gray-100 dark:hover:bg-gray-700">木</div></label>
+        <label><input type="checkbox" value="金" class="sr-only peer"><div class="cursor-pointer text-center p-2 border rounded-lg transition-colors peer-checked:bg-blue-600 peer-checked:text-white peer-checked:border-blue-600 dark:border-gray-600 dark:peer-checked:border-blue-600 hover:bg-gray-100 dark:hover:bg-gray-700">金</div></label>
+        <label><input type="checkbox" value="土" class="sr-only peer"><div class="cursor-pointer text-center p-2 border rounded-lg transition-colors peer-checked:bg-blue-600 peer-checked:text-white peer-checked:border-blue-600 dark:border-gray-600 dark:peer-checked:border-blue-600 hover:bg-gray-100 dark:hover:bg-gray-700">土</div></label>
+        <label><input type="checkbox" value="日" class="sr-only peer"><div class="cursor-pointer text-center p-2 border rounded-lg transition-colors peer-checked:bg-blue-600 peer-checked:text-white peer-checked:border-blue-600 dark:border-gray-600 dark:peer-checked:border-blue-600 hover:bg-gray-100 dark:hover:bg-gray-700">日</div></label>
       </div>
     </div>
     
@@ -363,13 +363,13 @@
       <div>
         <label class="block text-sm font-medium mb-2">必要な曜日</label>
         <div id="edit-days" class="grid grid-cols-4 sm:grid-cols-7 gap-2">
-          <label class="flex items-center space-x-1"><input type="checkbox" value="月" class="rounded text-blue-600 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600"> <span class="text-sm">月</span></label>
-          <label class="flex items-center space-x-1"><input type="checkbox" value="火" class="rounded text-blue-600 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600"> <span class="text-sm">火</span></label>
-          <label class="flex items-center space-x-1"><input type="checkbox" value="水" class="rounded text-blue-600 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600"> <span class="text-sm">水</span></label>
-          <label class="flex items-center space-x-1"><input type="checkbox" value="木" class="rounded text-blue-600 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600"> <span class="text-sm">木</span></label>
-          <label class="flex items-center space-x-1"><input type="checkbox" value="金" class="rounded text-blue-600 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600"> <span class="text-sm">金</span></label>
-          <label class="flex items-center space-x-1"><input type="checkbox" value="土" class="rounded text-blue-600 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600"> <span class="text-sm">土</span></label>
-          <label class="flex items-center space-x-1"><input type="checkbox" value="日" class="rounded text-blue-600 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600"> <span class="text-sm">日</span></label>
+          <label><input type="checkbox" value="月" class="sr-only peer"><div class="cursor-pointer text-center p-2 border rounded-lg transition-colors peer-checked:bg-blue-600 peer-checked:text-white peer-checked:border-blue-600 dark:border-gray-600 dark:peer-checked:border-blue-600 hover:bg-gray-100 dark:hover:bg-gray-700">月</div></label>
+          <label><input type="checkbox" value="火" class="sr-only peer"><div class="cursor-pointer text-center p-2 border rounded-lg transition-colors peer-checked:bg-blue-600 peer-checked:text-white peer-checked:border-blue-600 dark:border-gray-600 dark:peer-checked:border-blue-600 hover:bg-gray-100 dark:hover:bg-gray-700">火</div></label>
+          <label><input type="checkbox" value="水" class="sr-only peer"><div class="cursor-pointer text-center p-2 border rounded-lg transition-colors peer-checked:bg-blue-600 peer-checked:text-white peer-checked:border-blue-600 dark:border-gray-600 dark:peer-checked:border-blue-600 hover:bg-gray-100 dark:hover:bg-gray-700">水</div></label>
+          <label><input type="checkbox" value="木" class="sr-only peer"><div class="cursor-pointer text-center p-2 border rounded-lg transition-colors peer-checked:bg-blue-600 peer-checked:text-white peer-checked:border-blue-600 dark:border-gray-600 dark:peer-checked:border-blue-600 hover:bg-gray-100 dark:hover:bg-gray-700">木</div></label>
+          <label><input type="checkbox" value="金" class="sr-only peer"><div class="cursor-pointer text-center p-2 border rounded-lg transition-colors peer-checked:bg-blue-600 peer-checked:text-white peer-checked:border-blue-600 dark:border-gray-600 dark:peer-checked:border-blue-600 hover:bg-gray-100 dark:hover:bg-gray-700">金</div></label>
+          <label><input type="checkbox" value="土" class="sr-only peer"><div class="cursor-pointer text-center p-2 border rounded-lg transition-colors peer-checked:bg-blue-600 peer-checked:text-white peer-checked:border-blue-600 dark:border-gray-600 dark:peer-checked:border-blue-600 hover:bg-gray-100 dark:hover:bg-gray-700">土</div></label>
+          <label><input type="checkbox" value="日" class="sr-only peer"><div class="cursor-pointer text-center p-2 border rounded-lg transition-colors peer-checked:bg-blue-600 peer-checked:text-white peer-checked:border-blue-600 dark:border-gray-600 dark:peer-checked:border-blue-600 hover:bg-gray-100 dark:hover:bg-gray-700">日</div></label>
         </div>
       </div>
       
