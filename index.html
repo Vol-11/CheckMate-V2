@@ -397,6 +397,8 @@
 <script src="js/quick.js"></script>
 <script src="js/backup.js"></script>
 <script src="js/pwa.js"></script>
+<script src="js/sort.js"></script>
+<script src="js/search.js"></script>
 <script>
 // 詳細登録
 document.getElementById('add-detail').addEventListener('click', async () => {
@@ -664,111 +666,6 @@ function renderScanResults() {
   });
 }
 
-// アイテム一覧表示
-function renderItems() {
-  const list = document.getElementById('items-list');
-  const title = document.getElementById('items-title');
-  
-  let filtered = items;
-  
-  if (currentCategory !== 'all') {
-    filtered = filtered.filter(i => i.category === currentCategory);
-  }
-  
-  const searchTerm = document.getElementById('search-input').value.toLowerCase();
-  if (searchTerm) {
-    filtered = filtered.filter(i => 
-      i.name.toLowerCase().includes(searchTerm) ||
-      i.category.toLowerCase().includes(searchTerm) ||
-      (i.code && i.code.toLowerCase().includes(searchTerm)) ||
-      (i.memo && i.memo.toLowerCase().includes(searchTerm))
-    );
-  }
-  
-  filtered.sort((a, b) => {
-    if (sortBy === 'name') return a.name.localeCompare(b.name);
-    if (sortBy === 'category') return a.category.localeCompare(b.category);
-    if (sortBy === 'priority') {
-      const priorities = { '必須': 3, '重要': 2, '普通': 1 };
-      return priorities[b.priority] - priorities[a.priority];
-    }
-    if (sortBy === 'created') return new Date(b.createdAt) - new Date(a.createdAt);
-    return 0;
-  });
-  
-  title.textContent = `${getCategoryIcon(currentCategory)} ${currentCategory === 'all' ? '全アイテム' : currentCategory} (${filtered.length}件)`;
-  
-  if (filtered.length === 0) {
-    list.innerHTML = '<li class="text-center text-gray-500 dark:text-gray-400 py-8">該当するアイテムがありません</li>';
-    return;
-  }
-  
-  list.innerHTML = '';
-  filtered.forEach(item => {
-    const li = createItemElement(item, false);
-    list.appendChild(li);
-  });
-}
-
-// カテゴリータブ
-document.getElementById('category-tabs').addEventListener('click', e => {
-  if (e.target.classList.contains('category-btn')) {
-    document.querySelectorAll('.category-btn').forEach(btn => {
-      btn.classList.remove('bg-blue-600', 'text-white');
-      btn.classList.add('text-blue-600', 'dark:text-blue-400', 'bg-white', 'dark:bg-gray-800', 'hover:bg-blue-50', 'dark:hover:bg-gray-700');
-    });
-    e.target.classList.add('bg-blue-600', 'text-white');
-    e.target.classList.remove('text-blue-600', 'dark:text-blue-400', 'bg-white', 'dark:bg-gray-800', 'hover:bg-blue-50', 'dark:hover:bg-gray-700');
-    currentCategory = e.target.dataset.category;
-    renderItems();
-  }
-});
-
-// 検索機能
-const searchInput = document.getElementById('search-input');
-const searchClear = document.getElementById('search-clear');
-
-searchInput.addEventListener('input', () => {
-  renderItems();
-  searchClear.classList.toggle('hidden', !searchInput.value);
-});
-
-searchClear.addEventListener('click', () => {
-  searchInput.value = '';
-  searchClear.classList.add('hidden');
-  renderItems();
-});
-
-// ソート切り替え
-document.getElementById('sort-toggle').addEventListener('click', () => {
-  const sorts = ['name', 'category', 'priority', 'created'];
-  const currentIndex = sorts.indexOf(sortBy);
-  sortBy = sorts[(currentIndex + 1) % sorts.length];
-  
-  const labels = { name: '名前順', category: 'カテゴリー順', priority: '重要度順', created: '追加日順' };
-  document.getElementById('sort-toggle').textContent = `📊 ${labels[sortBy]}`;
-  
-  renderItems();
-});
-
-// チェックリスト機能
-function selectCurrentDay() {
-  const days = ['日', '月', '火', '水', '木', '金', '土'];
-  const today = days[new Date().getDay()];
-  currentDay = today;
-  
-  document.querySelectorAll('.preset-btn').forEach(btn => {
-    btn.classList.remove('bg-blue-600', 'text-white');
-    btn.classList.add('text-blue-600', 'dark:text-blue-400', 'bg-white', 'dark:bg-gray-800', 'hover:bg-blue-50', 'dark:hover:bg-gray-700');
-    if (btn.dataset.day === today) {
-      btn.classList.add('bg-blue-600', 'text-white');
-      btn.classList.remove('text-blue-600', 'dark:text-blue-400', 'bg-white', 'dark:bg-gray-800', 'hover:bg-blue-50', 'dark:hover:bg-gray-700');
-    }
-  });
-  
-  updateCheckDisplay();
-}
-
 // 曜日選択
 document.getElementById('preset-days').addEventListener('click', e => {
   if (e.target.classList.contains('preset-btn')) {
@@ -786,79 +683,6 @@ document.getElementById('preset-days').addEventListener('click', e => {
     renderScanResults();
   }
 });
-
-// 手動モード チェックリスト操作
-document.getElementById('check-all').addEventListener('click', async () => {
-  await performCheckAll();
-});
-
-document.getElementById('uncheck-all').addEventListener('click', async () => {
-  await performUncheckAll();
-});
-
-document.getElementById('reset-check').addEventListener('click', async () => {
-  await performResetCheck();
-});
-
-// スキャンモード チェックリスト操作
-document.getElementById('scan-check-all').addEventListener('click', async () => {
-  await performCheckAll();
-});
-
-document.getElementById('scan-uncheck-all').addEventListener('click', async () => {
-  await performUncheckAll();
-});
-
-document.getElementById('scan-reset-check').addEventListener('click', async () => {
-  await performResetCheck();
-});
-
-// 共通チェック操作関数
-async function performCheckAll() {
-  const dayItems = items.filter(i => i.days.includes(currentDay));
-  for (const item of dayItems) {
-    if (!item.checked) {
-      item.checked = true;
-      await updateItem(item);
-    }
-  }
-  updateCheckDisplay();
-  updateStats();
-  renderTodayChecklist();
-  renderTomorrowChecklist()
-  if (navigator.vibrate) navigator.vibrate([100, 50, 100, 50, 100]);
-}
-
-async function performUncheckAll() {
-  const dayItems = items.filter(i => i.days.includes(currentDay));
-  for (const item of dayItems) {
-    if (item.checked) {
-      item.checked = false;
-      await updateItem(item);
-    }
-  }
-  updateCheckDisplay();
-  updateStats();
-  renderTodayChecklist();
-  renderTomorrowChecklist()
-}
-
-async function performResetCheck() {
-  if (confirm('全てのアイテムのチェック状態をリセットしますか？')) {
-    for (const item of items) {
-      item.checked = false;
-      await updateItem(item);
-    }
-    renderItems();
-    updateCheckDisplay();
-    renderTodayChecklist();
-    renderTomorrowChecklist()
-    updateStats();
-    scanResults.clear();
-    renderScanResults();
-    showStatus('🔄 チェック状態をリセットしました', 'success');
-  }
-}
 
 // 編集モーダル
 function openEditModal(item) {

@@ -91,6 +91,97 @@ function renderScanChecklist(day) {
   });
 }
 
+// チェックリスト機能
+function selectCurrentDay() {
+  const days = ['日', '月', '火', '水', '木', '金', '土'];
+  const today = days[new Date().getDay()];
+  currentDay = today;
+
+  document.querySelectorAll('.preset-btn').forEach(btn => {
+    btn.classList.remove('bg-blue-600', 'text-white');
+    btn.classList.add('text-blue-600', 'dark:text-blue-400', 'bg-white', 'dark:bg-gray-800', 'hover:bg-blue-50', 'dark:hover:bg-gray-700');
+    if (btn.dataset.day === today) {
+      btn.classList.add('bg-blue-600', 'text-white');
+      btn.classList.remove('text-blue-600', 'dark:text-blue-400', 'bg-white', 'dark:bg-gray-800', 'hover:bg-blue-50', 'dark:hover:bg-gray-700');
+    }
+  });
+
+  updateCheckDisplay();
+}
+
+// 手動モード チェックリスト操作
+document.getElementById('check-all').addEventListener('click', async () => {
+  await performCheckAll();
+});
+
+document.getElementById('uncheck-all').addEventListener('click', async () => {
+  await performUncheckAll();
+});
+
+document.getElementById('reset-check').addEventListener('click', async () => {
+  await performResetCheck();
+});
+
+// スキャンモード チェックリスト操作
+document.getElementById('scan-check-all').addEventListener('click', async () => {
+  await performCheckAll();
+});
+
+document.getElementById('scan-uncheck-all').addEventListener('click', async () => {
+  await performUncheckAll();
+});
+
+document.getElementById('scan-reset-check').addEventListener('click', async () => {
+  await performResetCheck();
+});
+
+// 共通チェック操作関数
+async function performCheckAll() {
+  const dayItems = items.filter(i => i.days.includes(currentDay));
+  for (const item of dayItems) {
+    if (!item.checked) {
+      item.checked = true;
+      await updateItem(item);
+    }
+  }
+  updateCheckDisplay();
+  updateStats();
+  renderTodayChecklist();
+  renderTomorrowChecklist()
+  if (navigator.vibrate) navigator.vibrate([100, 50, 100, 50, 100]);
+}
+
+async function performUncheckAll() {
+  const dayItems = items.filter(i => i.days.includes(currentDay));
+  for (const item of dayItems) {
+    if (item.checked) {
+      item.checked = false;
+      await updateItem(item);
+    }
+  }
+  updateCheckDisplay();
+  updateStats();
+  renderTodayChecklist();
+  renderTomorrowChecklist()
+}
+
+async function performResetCheck() {
+  if (confirm('全てのアイテムのチェック状態をリセットしますか？')) {
+    for (const item of items) {
+      item.checked = false;
+      await updateItem(item);
+    }
+    renderItems();
+    updateCheckDisplay();
+    renderTodayChecklist();
+    renderTomorrowChecklist()
+    updateStats();
+    scanResults.clear();
+    renderScanResults();
+    showStatus('🔄 チェック状態をリセットしました', 'success');
+  }
+}
+
 // 今日のチェックリスト表示
 function renderTodayChecklist() {
   const todayItems = getTodayItems();

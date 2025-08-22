@@ -93,3 +93,49 @@ function createItemElement(item, isQuick = false) {
 
   return li;
 }
+
+// アイテム一覧表示
+function renderItems() {
+  const list = document.getElementById('items-list');
+  const title = document.getElementById('items-title');
+
+  let filtered = items;
+
+  if (currentCategory !== 'all') {
+    filtered = filtered.filter(i => i.category === currentCategory);
+  }
+
+  const searchTerm = document.getElementById('search-input').value.toLowerCase();
+  if (searchTerm) {
+    filtered = filtered.filter(i =>
+      i.name.toLowerCase().includes(searchTerm) ||
+      i.category.toLowerCase().includes(searchTerm) ||
+      (i.code && i.code.toLowerCase().includes(searchTerm)) ||
+      (i.memo && i.memo.toLowerCase().includes(searchTerm))
+    );
+  }
+
+  filtered.sort((a, b) => {
+    if (sortBy === 'name') return a.name.localeCompare(b.name);
+    if (sortBy === 'category') return a.category.localeCompare(b.category);
+    if (sortBy === 'priority') {
+      const priorities = { '必須': 3, '重要': 2, '普通': 1 };
+      return priorities[b.priority] - priorities[a.priority];
+    }
+    if (sortBy === 'created') return new Date(b.createdAt) - new Date(a.createdAt);
+    return 0;
+  });
+
+  title.textContent = `${getCategoryIcon(currentCategory)} ${currentCategory === 'all' ? '全アイテム' : currentCategory} (${filtered.length}件)`;
+
+  if (filtered.length === 0) {
+    list.innerHTML = '<li class="text-center text-gray-500 dark:text-gray-400 py-8">該当するアイテムがありません</li>';
+    return;
+  }
+
+  list.innerHTML = '';
+  filtered.forEach(item => {
+    const li = createItemElement(item, false);
+    list.appendChild(li);
+  });
+}
