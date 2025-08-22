@@ -19,7 +19,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Extract version from commit message or increment by 10
+      - name: Extract version from commit message or increment by 16
         id: get_version
         run: |
           commit_msg="${{ github.event.head_commit.message }}"
@@ -37,7 +37,7 @@ jobs:
             echo "from_commit=true" >> $GITHUB_OUTPUT
             echo "Found version in commit message: $version"
           else
-            # バージョンが見つからなかった場合、既存タグから10進数で繰り上げ
+            # バージョンが見つからなかった場合、既存タグから16進数で繰り上げ
             prev=$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' | sort -V | tail -n1)
             if [ -z "$prev" ]; then
               new_tag="v0.1.0"
@@ -46,25 +46,25 @@ jobs:
               vers=${prev#v}
               IFS='.' read -r MA MI PA <<< "$vers"
               
-              # パッチバージョンに10を足す
-              PA=$((PA + 10))
+              # パッチバージョンに16を足す（16進数での増加）
+              PA=$((PA + 16))
               
-              # 10進数の桁上がり処理
-              if [ $PA -ge 100 ]; then
-                MI=$((MI + PA / 100))
-                PA=$((PA % 100))
+              # 16進数の桁上がり処理（16で桁上がり）
+              if [ $PA -ge 16 ]; then
+                MI=$((MI + PA / 16))
+                PA=$((PA % 16))
               fi
               
-              if [ $MI -ge 100 ]; then
-                MA=$((MA + MI / 100))
-                MI=$((MI % 100))
+              if [ $MI -ge 16 ]; then
+                MA=$((MA + MI / 16))
+                MI=$((MI % 16))
               fi
               
               new_tag="v${MA}.${MI}.${PA}"
             fi
             echo "new_tag=$new_tag" >> $GITHUB_OUTPUT
             echo "from_commit=false" >> $GITHUB_OUTPUT
-            echo "Incremented version by 10: $new_tag (from $prev)"
+            echo "Incremented version by 16: $new_tag (from $prev)"
           fi
 
       - name: Check if tag already exists
@@ -88,7 +88,7 @@ jobs:
           if [ "${{ steps.get_version.outputs.from_commit }}" == "true" ]; then
             git tag -a "$new_tag" -m "Release $new_tag (from commit message)"
           else
-            git tag -a "$new_tag" -m "Release $new_tag (auto-incremented)"
+            git tag -a "$new_tag" -m "Release $new_tag (auto-incremented by 16)"
           fi
           
           git push origin "$new_tag"
