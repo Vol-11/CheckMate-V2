@@ -160,3 +160,28 @@ function renderItems() {
     list.appendChild(li);
   });
 }
+
+// カテゴリフィルターボタン表示
+function renderCategoryFilterButtons() {
+  const tabs = document.getElementById('category-tabs');
+  if (!tabs) return;
+
+  // 「全て」ボタン以外の既存のボタンを削除
+  const existingButtons = tabs.querySelectorAll('.category-btn:not([data-category="all"])');
+  existingButtons.forEach(btn => btn.remove());
+
+  // グローバル変数からボタンを生成
+  categories.forEach(category => {
+    const button = document.createElement('button');
+    button.className = 'category-btn px-3 py-1 border-2 border-blue-600 text-blue-600 dark:text-blue-400 bg-white dark:bg-gray-800 hover:bg-blue-50 dark:hover:bg-gray-700 rounded-full text-sm font-medium transition-all duration-200';
+    button.dataset.category = category.name;
+    
+    const icon = getCategoryIcon(category.name);
+    // ボタンのテキストが長くなりすぎないように調整
+    const shortName = category.name.length > 3 ? category.name.substring(0, 3) : category.name;
+    button.innerHTML = `${icon} ${shortName}`;
+    button.title = category.name; // フルネームはツールチップで表示
+
+    tabs.appendChild(button);
+  });
+}

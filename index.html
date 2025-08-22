@@ -179,11 +179,7 @@
     
     <div class="flex flex-wrap gap-2 mb-4" id="category-tabs">
       <button class="category-btn px-3 py-1 border-2 border-blue-600 bg-blue-600 text-white rounded-full text-sm font-medium transition-all duration-200" data-category="all">全て</button>
-      <button class="category-btn px-3 py-1 border-2 border-blue-600 text-blue-600 dark:text-blue-400 bg-white dark:bg-gray-800 hover:bg-blue-50 dark:hover:bg-gray-700 rounded-full text-sm font-medium transition-all duration-200" data-category="教材">📚 教材</button>
-      <button class="category-btn px-3 py-1 border-2 border-blue-600 text-blue-600 dark:text-blue-400 bg-white dark:bg-gray-800 hover:bg-blue-50 dark:hover:bg-gray-700 rounded-full text-sm font-medium transition-all duration-200" data-category="文房具">✏️ 文房具</button>
-      <button class="category-btn px-3 py-1 border-2 border-blue-600 text-blue-600 dark:text-blue-400 bg-white dark:bg-gray-800 hover:bg-blue-50 dark:hover:bg-gray-700 rounded-full text-sm font-medium transition-all duration-200" data-category="体育用品">⚽ 体育</button>
-      <button class="category-btn px-3 py-1 border-2 border-blue-600 text-blue-600 dark:text-blue-400 bg-white dark:bg-gray-800 hover:bg-blue-50 dark:hover:bg-gray-700 rounded-full text-sm font-medium transition-all duration-200" data-category="弁当・水筒">🍱 弁当</button>
-      <button class="category-btn px-3 py-1 border-2 border-blue-600 text-blue-600 dark:text-blue-400 bg-white dark:bg-gray-800 hover:bg-blue-50 dark:hover:bg-gray-700 rounded-full text-sm font-medium transition-all duration-200" data-category="その他">📦 他</button>
+      <!-- Category buttons are dynamically inserted here -->
     </div>
   </div>
 
@@ -299,6 +295,17 @@
     <div id="status-msg" class="mt-4 text-center font-semibold"></div>
   </div>
 
+  <div class="bg-white dark:bg-gray-800 rounded-xl p-4 sm:p-6 mb-4 shadow-md">
+    <h3 class="text-lg font-semibold mb-4 flex items-center"><span class="mr-2">🏷️</span>カテゴリ管理</h3>
+    <div class="flex gap-2 mb-4">
+      <input type="text" id="new-category-name" placeholder="新しいカテゴリ名" class="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white text-base">
+      <button id="add-category-btn" class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors duration-200 whitespace-nowrap">➕ 追加</button>
+    </div>
+    <ul id="category-management-list" class="space-y-2">
+      <!-- カテゴリが動的にここに挿入されます -->
+    </ul>
+  </div>
+
   <div class="bg-white dark:bg-gray-800 rounded-xl p-4 sm:p-6 shadow-md">
     <h3 class="text-lg font-semibold mb-4 flex items-center"><span class="mr-2">📱</span>PWA情報</h3>
     <p class="text-gray-600 dark:text-gray-400 mb-3">このアプリはPWA対応で以下の機能があります：</p>
@@ -330,14 +337,7 @@
         <div>
           <label class="block text-sm font-medium mb-2">カテゴリー</label>
           <select id="edit-category" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white">
-            <option value="教材">📚 教材</option>
-            <option value="文房具">✏️ 文房具</option>
-            <option value="体育用品">⚽ 体育用品</option>
-            <option value="弁当・水筒">🍱 弁当・水筒</option>
-            <option value="制服・服装">👔 制服・服装</option>
-            <option value="楽器">🎵 楽器</option>
-            <option value="部活用品">🏃 部活用品</option>
-            <option value="その他">📦 その他</option>
+            <!-- Options are dynamically inserted here -->
           </select>
         </div>
         <div>
@@ -764,10 +764,12 @@ document.getElementById('clear-items').addEventListener('click', async () => {
 document.getElementById('export-btn').addEventListener('click', async () => {
   try {
     const allItems = await getAllItems();
+    const allCategories = await getAllCategories(); // カテゴリも取得
     const exportData = {
+      version: 2,
+      categories: allCategories,
       items: allItems,
       exportedAt: new Date().toISOString(),
-      version: '2.2',
       app: 'wasuremono-pro'
     };
     const dataStr = JSON.stringify(exportData, null, 2);
@@ -787,34 +789,61 @@ document.getElementById('export-btn').addEventListener('click', async () => {
 document.getElementById('import-file').addEventListener('change', async e => {
   const file = e.target.files[0];
   if (!file) return;
-  
+
   const reader = new FileReader();
   reader.onload = async () => {
     try {
       const data = JSON.parse(reader.result);
-      const importItems = data.items || data;
-      
-      if (!Array.isArray(importItems)) {
-        throw new Error('不正なデータ形式です');
+      const isNewVersion = data.version === 2 && Array.isArray(data.categories) && Array.isArray(data.items);
+      const isOldVersion = !data.version && Array.isArray(data);
+
+      if (!isNewVersion && !isOldVersion) {
+        throw new Error('対応していないファイル形式です');
       }
-      
-      if (confirm(`${importItems.length}件のアイテムをインポートします。\n既存のデータは削除されます。続行しますか？`)) {
+
+      if (confirm(`ファイルをインポートします。
+既存のデータは全て上書きされます。よろしいですか？`)) {
         await clearItems();
-        
-        for (const item of importItems) {
-          delete item.id;
-          item.checked = false;
-          if (!item.category) item.category = 'その他';
-          if (!item.priority) item.priority = '普通';
-          if (!item.days) item.days = [];
-          await addItem(item);
+        await clearCategories();
+
+        let importedItemCount = 0;
+
+        if (isNewVersion) {
+          // 新バージョン
+          for (const category of data.categories) {
+            await addCategory(category);
+          }
+          for (const item of data.items) {
+            // IDは自動採番させるため削除
+            delete item.id;
+            await addItem(item);
+          }
+          importedItemCount = data.items.length;
+        } else {
+          // 旧バージョン
+          const importItems = data;
+          const categoryNames = new Set();
+          for (const item of importItems) {
+            delete item.id;
+            await addItem(item);
+            if (item.category) {
+              categoryNames.add(item.category);
+            }
+          }
+          // アイテムからカテゴリを抽出して作成
+          for (const catName of categoryNames) {
+            await addCategory({ id: new Date().getTime() + Math.random(), name: catName });
+          }
+          importedItemCount = importItems.length;
         }
-        
+
+        // UIを再読み込み・再描画
+        await loadCategoriesAndInitialize();
         await loadItems();
         updateDetailedStats();
         scanResults.clear();
         renderScanResults();
-        showStatus(`✅ ${importItems.length}件のアイテムをインポートしました`, 'success');
+        showStatus(`✅ ${importedItemCount}件のアイテムをインポートしました`, 'success');
       }
     } catch (err) {
       showStatus('インポートに失敗しました: ' + err.message, 'error');
@@ -838,8 +867,31 @@ async function loadItems() {
     console.error('Load items failed:', err);
   }
 }
+
+// カテゴリの読み込みと初期化
+async function loadCategoriesAndInitialize() {
+  try {
+    categories = await getAllCategories();
+    if (categories.length === 0) {
+      // カテゴリが空の場合、デフォルトカテゴリをDBに追加
+      const defaultCategories = ["教材", "文房具", "体育用品", "弁当・水筒", "制服・服装", "楽器", "部活用品", "その他"];
+      for (const catName of defaultCategories) {
+        const newCat = { id: new Date().getTime() + Math.random(), name: catName };
+        await addCategory(newCat);
+      }
+      categories = await getAllCategories(); // 再読み込み
+    }
+    renderCategoryManagementList(); // カテゴリ管理リストを描画
+    renderCategoryOptions(); // プルダウンを描画
+    renderCategoryFilterButtons(); // フィルターボタンを描画
+  } catch (err) {
+    console.error('Failed to load or initialize categories:', err);
+  }
+}
+
 // 初期化
 openDB().then(async () => {
+  await loadCategoriesAndInitialize(); // カテゴリを先に読み込み
   await loadItems();
   selectCurrentDay();
   
