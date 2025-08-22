@@ -76,6 +76,22 @@
   </div>
 </header>
 
+<!-- 統計情報 -->
+<div class="grid grid-cols-3 gap-2 sm:gap-4 text-center mb-4">
+  <div class="bg-white dark:bg-gray-800 rounded-lg p-3 shadow">
+    <div id="total-items" class="text-xl font-bold text-blue-600 dark:text-blue-400">0</div>
+    <div class="text-xs text-gray-500 dark:text-gray-400">総アイテム</div>
+  </div>
+  <div class="bg-white dark:bg-gray-800 rounded-lg p-3 shadow">
+    <div id="checked-items" class="text-xl font-bold text-green-600 dark:text-green-400">0</div>
+    <div class="text-xs text-gray-500 dark:text-gray-400">チェック済</div>
+  </div>
+  <div class="bg-white dark:bg-gray-800 rounded-lg p-3 shadow">
+    <div id="today-items" class="text-xl font-bold text-orange-600 dark:text-orange-400">0</div>
+    <div class="text-xs text-gray-500 dark:text-gray-400">今日の分</div>
+  </div>
+</div>
+
 <!-- タブナビゲーション -->
 <nav class="flex bg-white dark:bg-gray-800 rounded-lg mb-4 overflow-hidden shadow-md">
   <button class="tab-btn flex-1 py-3 px-2 text-xs sm:text-sm font-medium transition-all duration-200 bg-blue-600 text-white" data-tab="check">✅ チェック</button>
@@ -947,42 +963,10 @@ openDB().then(async () => {
       showStatus('👋 ようこそ！まずは教材や持ち物を追加してみましょう', 'info');
     }, 1000);
   }
+}).catch(err => {
+    console.error('データベースの初期化に失敗しました:', err);
+    showStatus('データベースの読み込みに失敗しました。リロードしてください。', 'error');
 });
-
-// データリセット機能
-document.getElementById('reset-all-items-btn').addEventListener('click', async () => {
-    if (confirm('全てのアイテムを削除します。本当によろしいですか？\nこの操作は元に戻せません。')) {
-        await clearItems();
-        items = [];
-        await renderItems();
-        await updateCheckDisplay();
-        await updateStats();
-        showStatus('🗑 全てのアイテムを削除しました', 'success');
-    }
-});
-
-document.getElementById('reset-forgotten-history-btn').addEventListener('click', async () => {
-    if (confirm('全ての忘れ物履歴を削除します。本当によろしいですか？\nこの操作は元に戻せません。')) {
-        await clearForgottenRecords();
-        // UIの更新
-        await renderItems(); // ハイライトを消すため
-        await updateCheckDisplay(); // ハイライトを消すため
-        showStatus('😥 全ての忘れ物履歴を削除しました', 'success');
-        // もし忘れ物タブが開かれていたら、表示を更新する
-        if (document.getElementById('forgotten').style.display !== 'none') {
-            renderForgottenHistoryMode();
-        }
-    }
-});
-
-document.getElementById('reset-categories-btn').addEventListener('click', async () => {
-    if (confirm('全てのカスタムカテゴリを削除し、デフォルト設定に戻します。本当によろしいですか？')) {
-        await clearCategories();
-        await loadCategoriesAndInitialize(); // デフォルトを再読み込み
-        showStatus('🏷️ カテゴリをリセットしました', 'success');
-    }
-});
-
 
 // クリーンアップ
 window.addEventListener('beforeunload', () => {
