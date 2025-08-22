@@ -14,7 +14,7 @@ function openDB() {
       db = e.target.result;
       // アイテムストア
       if (!db.objectStoreNames.contains(ITEMS_STORE_NAME)) {
-        const store = db.createObjectStore(ITEMS_STORE_NAME, { keyPath: 'id' });
+        const store = db.createObjectStore(ITEMS_STORE_NAME, { keyPath: 'id', autoIncrement: true });
         store.createIndex('category', 'category', { unique: false });
         store.createIndex('name', 'name', { unique: false });
         store.createIndex('code', 'code', { unique: false });

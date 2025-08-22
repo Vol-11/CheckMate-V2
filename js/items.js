@@ -185,3 +185,69 @@ function renderCategoryFilterButtons() {
     tabs.appendChild(button);
   });
 }
+
+// アイテム追加
+async function addNewItem(itemData) {
+  const now = new Date().toISOString();
+  const newItem = {
+    name: itemData.name,
+    category: itemData.category,
+    priority: itemData.priority || '普通',
+    code: itemData.code || '',
+    memo: itemData.memo || '',
+    days: itemData.days || [],
+    checked: false,
+    createdAt: now,
+    updatedAt: now
+  };
+
+  try {
+    const newId = await addItem(newItem);
+    newItem.id = newId;
+    items.push(newItem);
+    return true;
+  } catch (err) {
+    console.error('Failed to add item:', err);
+    showStatus(`❌ 登録に失敗しました: ${err.message}`, 'error');
+    return false;
+  }
+}
+
+// ステータスメッセージ表示
+function showStatus(message, type = 'info') {
+  const statusMsg = document.getElementById('status-msg');
+  if (!statusMsg) return;
+
+  let bgColor, textColor, borderColor;
+  switch (type) {
+    case 'success':
+      bgColor = 'bg-green-100 dark:bg-green-900/30';
+      textColor = 'text-green-700 dark:text-green-300';
+      borderColor = 'border-green-300 dark:border-green-700';
+      break;
+    case 'error':
+      bgColor = 'bg-red-100 dark:bg-red-900/30';
+      textColor = 'text-red-700 dark:text-red-300';
+      borderColor = 'border-red-300 dark:border-red-700';
+      break;
+    case 'warning':
+      bgColor = 'bg-yellow-100 dark:bg-yellow-900/30';
+      textColor = 'text-yellow-700 dark:text-yellow-300';
+      borderColor = 'border-yellow-300 dark:border-yellow-700';
+      break;
+    default: // info
+      bgColor = 'bg-blue-100 dark:bg-blue-900/30';
+      textColor = 'text-blue-700 dark:text-blue-300';
+      borderColor = 'border-blue-300 dark:border-blue-700';
+  }
+
+  statusMsg.className = `p-3 rounded-lg text-center font-medium border ${bgColor} ${textColor} ${borderColor}`;
+  statusMsg.textContent = message;
+  statusMsg.style.opacity = '1';
+  statusMsg.style.transform = 'translateY(0)';
+
+  setTimeout(() => {
+    statusMsg.style.opacity = '0';
+    statusMsg.style.transform = 'translateY(-10px)';
+  }, 3000);
+}
