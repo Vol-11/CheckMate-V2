@@ -3,10 +3,10 @@ name: Auto Release on Commit
 on:
   push:
     branches:
-      - main   # 必要に応じてブランチを指定
+      - main
 
 permissions:
-  contents: write   # tag push / release 作成に必要
+  contents: write
   actions: read
 
 jobs:
@@ -17,65 +17,99 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # タグ解析に必要（全履歴/タグ取得）
+          fetch-depth: 0
 
-      - name: Get latest semver tag (vX.Y.Z) or default v0.0.0
-        id: get_prev_tag
+      - name: Extract version from commit message or increment by 10
+        id: get_version
         run: |
-          # 既存の semver タグを収集
-          prev=$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' | sort -V | tail -n1)
-          if [ -z "$prev" ]; then
-            echo "prev=v0.0.0" >> $GITHUB_OUTPUT
+          commit_msg="${{ github.event.head_commit.message }}"
+          first_line=$(echo "$commit_msg" | head -n1)
+          
+          # コミットメッセージの最初の行からvx.x.xまたはx.x.xを抽出
+          if echo "$first_line" | grep -qE '^v?[0-9]+\.[0-9]+\.[0-9]+'; then
+            # バージョンが見つかった場合
+            version=$(echo "$first_line" | grep -oE '^v?[0-9]+\.[0-9]+\.[0-9]+')
+            # vがなければ追加
+            if [[ ! "$version" =~ ^v ]]; then
+              version="v$version"
+            fi
+            echo "new_tag=$version" >> $GITHUB_OUTPUT
+            echo "from_commit=true" >> $GITHUB_OUTPUT
+            echo "Found version in commit message: $version"
           else
-            echo "prev=$prev" >> $GITHUB_OUTPUT
+            # バージョンが見つからなかった場合、既存タグから10進数で繰り上げ
+            prev=$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' | sort -V | tail -n1)
+            if [ -z "$prev" ]; then
+              new_tag="v0.1.0"
+            else
+              # vX.Y.Z を数値に分解
+              vers=${prev#v}
+              IFS='.' read -r MA MI PA <<< "$vers"
+              
+              # パッチバージョンに10を足す
+              PA=$((PA + 10))
+              
+              # 10進数の桁上がり処理
+              if [ $PA -ge 100 ]; then
+                MI=$((MI + PA / 100))
+                PA=$((PA % 100))
+              fi
+              
+              if [ $MI -ge 100 ]; then
+                MA=$((MA + MI / 100))
+                MI=$((MI % 100))
+              fi
+              
+              new_tag="v${MA}.${MI}.${PA}"
+            fi
+            echo "new_tag=$new_tag" >> $GITHUB_OUTPUT
+            echo "from_commit=false" >> $GITHUB_OUTPUT
+            echo "Incremented version by 10: $new_tag (from $prev)"
           fi
 
-      - name: Bump patch version
-        id: bump
+      - name: Check if tag already exists
+        id: check_tag
         run: |
-          prev="${{ steps.get_prev_tag.outputs.prev }}"
-          # vX.Y.Z を数値に分解
-          vers=${prev#v}
-          IFS='.' read -r MA MI PA <<< "$vers"
-          PA=$((PA + 1))
-          new="v${MA}.${MI}.${PA}"
-          echo "new_tag=$new" >> $GITHUB_OUTPUT
-
-      - name: Create and push tag (if not exists)
-        id: push_tag
-        run: |
-          new="${{ steps.bump.outputs.new_tag }}"
-          # 競合回避：同名タグが存在すればスキップ
-          if git rev-parse -q --verify "refs/tags/${new}" >/dev/null; then
-            echo "Tag ${new} already exists. Skipping tag creation."
-            echo "created=false" >> $GITHUB_OUTPUT
-            exit 0
+          new_tag="${{ steps.get_version.outputs.new_tag }}"
+          if git rev-parse -q --verify "refs/tags/${new_tag}" >/dev/null; then
+            echo "Tag ${new_tag} already exists. Skipping release."
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
           fi
+
+      - name: Create and push tag
+        if: steps.check_tag.outputs.exists == 'false'
+        run: |
+          new_tag="${{ steps.get_version.outputs.new_tag }}"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag -a "$new" -m "Release $new"
-          git push origin "$new"
-          echo "created=true" >> $GITHUB_OUTPUT
+          
+          if [ "${{ steps.get_version.outputs.from_commit }}" == "true" ]; then
+            git tag -a "$new_tag" -m "Release $new_tag (from commit message)"
+          else
+            git tag -a "$new_tag" -m "Release $new_tag (auto-incremented)"
+          fi
+          
+          git push origin "$new_tag"
 
       - name: Create ZIP of current commit
+        if: steps.check_tag.outputs.exists == 'false'
         id: zip
         run: |
-          # リポジトリの全ファイルを zip（.git や GitHub のメタは除外）
-          zipname="site-${{ steps.bump.outputs.new_tag }}.zip"
-          # -x で除外したいパスがあれば追記（例: node_modules, .git, .github など）
-          zip -r "$zipname" . \
-            -x "./.git/*" "./.github/*"
+          zipname="site-${{ steps.get_version.outputs.new_tag }}.zip"
+          zip -r "$zipname" . -x "./.git/*" "./.github/*"
           echo "zipname=$zipname" >> $GITHUB_OUTPUT
 
       - name: Create GitHub Release
-        id: create_release
+        if: steps.check_tag.outputs.exists == 'false'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.bump.outputs.new_tag }}
-          name: Release ${{ steps.bump.outputs.new_tag }}
+          tag_name: ${{ steps.get_version.outputs.new_tag }}
+          name: Release ${{ steps.get_version.outputs.new_tag }}
           draft: false
           prerelease: false
-          generate_release_notes: false
+          generate_release_notes: true
           files: ${{ steps.zip.outputs.zipname }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
