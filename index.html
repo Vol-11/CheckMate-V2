@@ -407,8 +407,8 @@ document.getElementById('add-detail').addEventListener('click', async () => {
   const priority = document.getElementById('detail-priority').value;
   const code = document.getElementById('detail-code').value;
   const memo = document.getElementById('detail-memo').value;
-  const dayCheckboxes = document.querySelectorAll('#scanner input[type=checkbox]:checked');
-  const days = Array.from(dayCheckboxes).map(cb => cb.value);
+  const dayCheckboxes = document.querySelectorAll('#detail-days input[type=checkbox]');
+  const days = Array.from(dayCheckboxes).filter(cb => cb.checked).map(cb => cb.value);
   
   if (!name.trim()) {
     document.getElementById('detail-name').focus();
