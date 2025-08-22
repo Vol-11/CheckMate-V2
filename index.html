@@ -3,7 +3,27 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>📚 忘れ物防止システム Pro</title>
+<title>📚 CheckMate v2</title>
+
+<!-- SEO and Social Sharing Meta Tags -->
+<meta name="description" content="日々の持ち物を管理し、忘れ物を防止するためのチェックリストPWAです。曜日ごとのアイテム登録やPWA対応で、あなたの「うっかり」をなくします。">
+<!-- Open Graph / Facebook -->
+<meta property="og:type" content="website">
+<!-- TODO: Replace with the final, absolute URL of your deployed app -->
+<meta property="og:url" content="https://your-app-url.com/">
+<meta property="og:title" content="📚 CheckMate V2">
+<meta property="og:description" content="日々の持ち物を管理し、忘れ物を防止するためのチェックリストPWAです。曜日ごとのアイテム登録やPWA対応で、あなたの「うっかり」をなくします。">
+<!-- TODO: Replace with the final, absolute URL to your icon image -->
+<meta property="og:image" content="https://your-app-url.com/icons/icon-512.png">
+<!-- Twitter -->
+<meta property="twitter:card" content="summary_large_image">
+<!-- TODO: Replace with the final, absolute URL of your deployed app -->
+<meta property="twitter:url" content="https://your-app-url.com/">
+<meta property="twitter:title" content="📚 CheckMate V2">
+<meta property="twitter:description" content="日々の持ち物を管理し、忘れ物を防止するためのチェックリストPWAです。曜日ごとのアイテム登録やPWA対応で、あなたの「うっかり」をなくします。">
+<!-- TODO: Replace with the final, absolute URL to your icon image -->
+<meta property="twitter:image" content="https://your-app-url.com/icons/icon-512.png">
+
 <meta name="theme-color" content="#007bff">
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="js/style_config.js"></script>
@@ -24,10 +44,12 @@
 <div class="max-w-lg mx-auto p-2 sm:p-4">
 
 <!-- ヘッダー -->
-<header class="bg-gradient-to-r from-blue-600 to-blue-700 dark:from-blue-700 dark:to-blue-800 text-white p-4 sm:p-6 rounded-xl text-center mb-4 shadow-lg">
-  <div class="flex justify-between items-center mb-2">
-    <h1 class="text-xl sm:text-2xl font-bold">📚 忘れ物防止システム Pro</h1>
-    <!-- ダークモード切り替えボタン -->
+<header class="relative bg-gradient-to-r from-blue-600 to-blue-700 dark:from-blue-700 dark:to-blue-800 text-white p-4 sm:p-6 rounded-xl text-center mb-4 shadow-lg">
+  <h1 class="text-xl sm:text-2xl font-bold">📚 CheckMate v2</h1>
+  <p class="text-blue-100 dark:text-blue-200">教材・持ち物をまとめて管理！</p>
+  
+  <!-- ダークモード切り替えボタン -->
+  <div class="absolute top-3 right-3 sm:top-4 sm:right-4">
     <button id="theme-toggle" class="p-2 rounded-lg bg-white/20 hover:bg-white/30 transition-colors duration-200">
       <svg id="theme-toggle-dark-icon" class="w-5 h-5 hidden" fill="currentColor" viewBox="0 0 20 20">
         <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"></path>
@@ -37,7 +59,6 @@
       </svg>
     </button>
   </div>
-  <p class="text-blue-100 dark:text-blue-200">教材・持ち物をまとめて管理！</p>
 </header>
 
 <!-- タブナビゲーション -->
@@ -77,7 +98,6 @@
         <option value="教材">📚 教材</option>
         <option value="文房具">✏️ 文房具</option>
         <option value="体育用品">⚽ 体育用品</option>
-        <option value="弁当・水筒">🍱 弁当・水筒</option>
         <option value="その他">📦 その他</option>
       </select>
       <button id="quick-scan" class="px-3 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg font-medium transition-colors duration-200 text-sm">📷 スキャン追加</button>
