@@ -3,10 +3,13 @@ document.getElementById('backup-btn').addEventListener('click', async () => {
   try {
     const allItems = await getAllItems();
     const allCategories = await getAllCategories();
+    const allForgottenRecords = await getAllForgottenRecords(); // 忘れ物履歴を取得
+
     localStorage.setItem('wasuremono-backup', JSON.stringify({
-      version: 2,
+      version: 3, // バージョン更新
       categories: allCategories,
       items: allItems,
+      forgottenRecords: allForgottenRecords, // 忘れ物履歴を追加
       backupAt: new Date().toISOString()
     }));
     showStatus('💾 バックアップを作成しました', 'success');
@@ -27,17 +30,24 @@ document.getElementById('restore-btn').addEventListener('click', async () => {
     if (confirm(`バックアップ（${new Date(data.backupAt).toLocaleString()}）から復元しますか？\n現在のデータは上書きされます。`)) {
       await clearItems();
       await clearCategories();
+      await clearForgottenRecords(); // 忘れ物履歴もクリア
 
-      const isNewVersion = data.version === 2 && Array.isArray(data.categories) && Array.isArray(data.items);
+      const isNewVersion = (data.version === 2 || data.version === 3) && Array.isArray(data.categories) && Array.isArray(data.items);
 
       if (isNewVersion) {
-        // 新バージョン
+        // 新バージョン (v2, v3)
         for (const category of data.categories) {
           await addCategory(category);
         }
         for (const item of data.items) {
           delete item.id;
           await addItem(item);
+        }
+        // v3以降は忘れ物履歴も復元
+        if (data.version === 3 && data.forgottenRecords && Array.isArray(data.forgottenRecords)) {
+            for (const record of data.forgottenRecords) {
+              await addForgottenRecord(record);
+            }
         }
       } else {
         // 旧バージョン (data.items があると想定)
@@ -67,3 +77,4 @@ document.getElementById('restore-btn').addEventListener('click', async () => {
     showStatus('復元に失敗しました: ' + err.message, 'error');
   }
 });
+

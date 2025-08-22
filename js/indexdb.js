@@ -1,9 +1,9 @@
 // IndexedDB設定
 const DB_NAME = 'wasuremonoPro';
-const DB_VERSION = 4; // DBバージョンを更新
+const DB_VERSION = 5; // DBバージョンを更新
 const ITEMS_STORE_NAME = 'items';
 const CATEGORIES_STORE_NAME = 'categories';
-const FORGOTTEN_RECORDS_STORE_NAME = 'forgotten_records'; // 新規
+const FORGOTTEN_RECORDS_STORE_NAME = 'forgotten_records';
 let db;
 
 function openDB() {
@@ -15,21 +15,22 @@ function openDB() {
       db = e.target.result;
       // アイテムストア
       if (!db.objectStoreNames.contains(ITEMS_STORE_NAME)) {
-        const store = db.createObjectStore(ITEMS_STORE_NAME, { keyPath: 'id', autoIncrement: true });
-        store.createIndex('category', 'category', { unique: false });
-        store.createIndex('name', 'name', { unique: false });
-        store.createIndex('code', 'code', { unique: false });
+        const itemStore = db.createObjectStore(ITEMS_STORE_NAME, { keyPath: 'id', autoIncrement: true });
+        itemStore.createIndex('category', 'category', { unique: false });
+        itemStore.createIndex('name', 'name', { unique: false });
+        itemStore.createIndex('code', 'code', { unique: false });
       }
       // カテゴリストア
       if (!db.objectStoreNames.contains(CATEGORIES_STORE_NAME)) {
-        const store = db.createObjectStore(CATEGORIES_STORE_NAME, { keyPath: 'id' });
-        store.createIndex('name', 'name', { unique: true });
+        const categoryStore = db.createObjectStore(CATEGORIES_STORE_NAME, { keyPath: 'id' });
+        categoryStore.createIndex('name', 'name', { unique: true });
       }
-      // 忘れ物記録ストア (新規)
-      if (!db.objectStoreNames.contains(FORGOTTEN_RECORDS_STORE_NAME)) {
-        const store = db.createObjectStore(FORGOTTEN_RECORDS_STORE_NAME, { keyPath: 'id', autoIncrement: true });
-        store.createIndex('date', 'date', { unique: true });
+      // 忘れ物記録ストア (dateをキーにする)
+      if (db.objectStoreNames.contains(FORGOTTEN_RECORDS_STORE_NAME)) {
+          db.deleteObjectStore(FORGOTTEN_RECORDS_STORE_NAME);
       }
+      const forgottenStore = db.createObjectStore(FORGOTTEN_RECORDS_STORE_NAME, { keyPath: 'date' });
+      forgottenStore.createIndex('date_idx', 'date', { unique: true });
     };
   });
 }
@@ -126,13 +127,12 @@ function clearCategories() {
     });
 }
 
-// 忘れ物記録 CRUD操作 (新規)
+// 忘れ物記録 CRUD操作
 function addForgottenRecord(record) {
   return new Promise((resolve, reject) => {
     const tx = db.transaction(FORGOTTEN_RECORDS_STORE_NAME, 'readwrite');
     const store = tx.objectStore(FORGOTTEN_RECORDS_STORE_NAME);
-    // 同じ日付のデータがあれば上書き、なければ追加
-    const request = store.put(record);
+    const request = store.put(record); // dateがキーなので、同じ日付は上書きされる
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
   });
@@ -145,5 +145,44 @@ function getAllForgottenRecords() {
     const request = store.getAll();
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
+  });
+}
+
+function clearForgottenRecords() {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(FORGOTTEN_RECORDS_STORE_NAME, 'readwrite');
+    const store = tx.objectStore(FORGOTTEN_RECORDS_STORE_NAME);
+    const request = store.clear();
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error);
+  });
+}
+
+function deleteForgottenRecord(date) {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(FORGOTTEN_RECORDS_STORE_NAME, 'readwrite');
+    const store = tx.objectStore(FORGOTTEN_RECORDS_STORE_NAME);
+    const request = store.delete(date);
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error);
+  });
+}
+
+function deleteForgottenRecordsBefore(date) {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(FORGOTTEN_RECORDS_STORE_NAME, 'readwrite');
+    const store = tx.objectStore(FORGOTTEN_RECORDS_STORE_NAME);
+    const request = store.openCursor();
+    request.onsuccess = e => {
+      const cursor = e.target.result;
+      if (cursor) {
+        if (new Date(cursor.key) < date) {
+          cursor.delete();
+        }
+        cursor.continue();
+      }
+    };
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
   });
 }
