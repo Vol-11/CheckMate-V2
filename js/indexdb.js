@@ -240,6 +240,9 @@ async function deleteOverride(date) {
     const store = tx.objectStore(DATE_OVERRIDES_STORE_NAME);
     const request = store.delete(date);
     request.onsuccess = () => resolve();
-    request.onerror = () => reject(request.error);
+    request.onerror = () => {
+        console.error('Error deleting override:', request.error);
+        reject(request.error);
+    };
   });
 }
