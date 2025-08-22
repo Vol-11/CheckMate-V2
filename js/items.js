@@ -127,8 +127,7 @@ function createItemElement(item, isQuick = false, forgottenStats = { counts: {},
     updateCheckDisplay(); // This will re-render the checklist with new stats
     if (!isQuick) renderItems(); // This will re-render the item list
     if (isQuick) {
-        renderTodayChecklist();
-        renderTomorrowChecklist();
+        
     }
 
     if (checkbox.checked && navigator.vibrate) {

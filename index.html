@@ -786,8 +786,6 @@ document.getElementById('save-edit').addEventListener('click', async () => {
     await updateItem(editingItem);
     renderItems();
     updateCheckDisplay();
-    renderTodayChecklist();
-    renderTomorrowChecklist()
     updateStats();
     closeEditModal();
     showStatus('✅ 更新しました', 'success');
@@ -907,8 +905,6 @@ async function loadItems() {
   try {
     items = await getAllItems();
     renderItems();
-    renderTodayChecklist();
-    renderTomorrowChecklist();
     updateStats();
   } catch (err) {
     console.error('Load items failed:', err);
