@@ -17,37 +17,28 @@ function getTomorrowItems() {
 // アイテム要素作成
 function createItemElement(item, isQuick = false) {
   const li = document.createElement('li');
-  li.className = `flex items-center p-3 border-2 rounded-lg transition-all duration-200 ${
+  li.className = `flex items-center justify-between p-3 border-2 rounded-lg transition-all duration-200 ${
     item.checked 
       ? 'bg-gradient-to-r from-green-50 to-green-100 dark:from-green-900/30 dark:to-green-800/30 border-green-500' 
       : 'bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 hover:border-blue-300 dark:hover:border-blue-500'
   }`;
   li.dataset.id = item.id;
 
+  // --- Main clickable area (checkbox + info) ---
+  const clickableArea = document.createElement('div');
+  clickableArea.className = 'flex-grow flex items-center cursor-pointer';
+
   const checkbox = document.createElement('input');
   checkbox.type = 'checkbox';
-  checkbox.className = 'mr-3 w-5 h-5 text-blue-600 rounded focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600';
+  checkbox.className = 'w-5 h-5 text-blue-600 rounded focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600';
   checkbox.checked = !!item.checked;
-  checkbox.addEventListener('change', async () => {
-    item.checked = checkbox.checked;
-    await updateItem(item);
-    updateStats();
-    updateCheckDisplay();
-    if (!isQuick) renderItems();
-    if (isQuick) renderTodayChecklist() || renderTomorrowChecklist();
-
-    if (checkbox.checked && navigator.vibrate) {
-      navigator.vibrate([100, 50, 100]);
-    }
-  });
-
+  
   const info = document.createElement('div');
-  info.className = 'flex-1';
+  info.className = 'flex-1 ml-3'; // Add margin left to space from checkbox
 
   let priorityIcon = '';
   if (item.priority === '重要') priorityIcon = '⭐ ';
   else if (item.priority === '必須') priorityIcon = '‼️ ';
-
   let categoryIcon = getCategoryIcon(item.category);
 
   info.innerHTML = `
@@ -60,19 +51,28 @@ function createItemElement(item, isQuick = false) {
     </div>
   `;
 
+  clickableArea.appendChild(checkbox);
+  clickableArea.appendChild(info);
+  li.appendChild(clickableArea);
+
+  // --- Action buttons ---
   if (!isQuick) {
     const actions = document.createElement('div');
-    actions.className = 'flex gap-2 ml-3';
+    actions.className = 'flex-shrink-0 flex gap-2 ml-3'; // flex-shrink-0 prevents shrinking
 
     const editBtn = document.createElement('button');
     editBtn.textContent = '✏️';
     editBtn.className = 'px-2 py-1 bg-cyan-600 hover:bg-cyan-700 text-white rounded text-sm transition-colors duration-200';
-    editBtn.addEventListener('click', () => openEditModal(item));
+    editBtn.addEventListener('click', (e) => {
+      e.stopPropagation(); // Prevent li click event
+      openEditModal(item);
+    });
 
     const deleteBtn = document.createElement('button');
     deleteBtn.textContent = '🗑';
     deleteBtn.className = 'px-2 py-1 bg-red-600 hover:bg-red-700 text-white rounded text-sm transition-colors duration-200';
-    deleteBtn.addEventListener('click', async () => {
+    deleteBtn.addEventListener('click', async (e) => {
+      e.stopPropagation(); // Prevent li click event
       if (confirm(`「${item.name}」を削除しますか？`)) {
         await deleteItem(item.id);
         items = items.filter(i => i.id !== item.id);
@@ -87,9 +87,30 @@ function createItemElement(item, isQuick = false) {
     actions.appendChild(deleteBtn);
     li.appendChild(actions);
   }
+  
+  // --- Event Listeners ---
+  const handleCheck = async () => {
+    item.checked = checkbox.checked;
+    await updateItem(item);
+    updateStats();
+    updateCheckDisplay();
+    if (!isQuick) renderItems();
+    if (isQuick) renderTodayChecklist() || renderTomorrowChecklist();
 
-  li.appendChild(checkbox);
-  li.appendChild(info);
+    if (checkbox.checked && navigator.vibrate) {
+      navigator.vibrate([100, 50, 100]);
+    }
+  };
+
+  checkbox.addEventListener('change', handleCheck);
+
+  clickableArea.addEventListener('click', (e) => {
+    // Only toggle if the click is not on the checkbox itself
+    if (e.target !== checkbox) {
+      checkbox.checked = !checkbox.checked;
+      handleCheck();
+    }
+  });
 
   return li;
 }
