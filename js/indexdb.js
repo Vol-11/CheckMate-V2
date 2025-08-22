@@ -1,46 +1,52 @@
 // IndexedDB設定
 const DB_NAME = 'wasuremonoPro';
-const DB_VERSION = 6; // DBバージョンを更新
+const DB_VERSION = 6; 
 const ITEMS_STORE_NAME = 'items';
 const CATEGORIES_STORE_NAME = 'categories';
 const FORGOTTEN_RECORDS_STORE_NAME = 'forgotten_records';
-const DATE_OVERRIDES_STORE_NAME = 'date_overrides'; // New store
+const DATE_OVERRIDES_STORE_NAME = 'date_overrides'; 
 let db;
 
-function openDB() {
-  return new Promise((resolve, reject) => {
+const dbReadyPromise = new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
     request.onerror = () => reject(request.error);
-    request.onsuccess = () => { db = request.result; resolve(db); };
-    request.onupgradeneeded = e => {
-      db = e.target.result;
-      // アイテムストア
-      if (!db.objectStoreNames.contains(ITEMS_STORE_NAME)) {
-        const itemStore = db.createObjectStore(ITEMS_STORE_NAME, { keyPath: 'id', autoIncrement: true });
-        itemStore.createIndex('category', 'category', { unique: false });
-        itemStore.createIndex('name', 'name', { unique: false });
-        itemStore.createIndex('code', 'code', { unique: false });
-      }
-      // カテゴリストア
-      if (!db.objectStoreNames.contains(CATEGORIES_STORE_NAME)) {
-        const categoryStore = db.createObjectStore(CATEGORIES_STORE_NAME, { keyPath: 'id' });
-        categoryStore.createIndex('name', 'name', { unique: true });
-      }
-      // 忘れ物記録ストア (dateをキーにする)
-      if (!db.objectStoreNames.contains(FORGOTTEN_RECORDS_STORE_NAME)) {
-          const forgottenStore = db.createObjectStore(FORGOTTEN_RECORDS_STORE_NAME, { keyPath: 'date' });
-          forgottenStore.createIndex('date_idx', 'date', { unique: true });
-      }
-      // 日付オーバーライドストア (dateをキーにする)
-      if (!db.objectStoreNames.contains(DATE_OVERRIDES_STORE_NAME)) {
-        db.createObjectStore(DATE_OVERRIDES_STORE_NAME, { keyPath: 'date' });
-      }
+    request.onsuccess = () => {
+        db = request.result;
+        resolve(db);
     };
-  });
+    request.onupgradeneeded = e => {
+        db = e.target.result;
+        // アイテムストア
+        if (!db.objectStoreNames.contains(ITEMS_STORE_NAME)) {
+            const itemStore = db.createObjectStore(ITEMS_STORE_NAME, { keyPath: 'id', autoIncrement: true });
+            itemStore.createIndex('category', 'category', { unique: false });
+            itemStore.createIndex('name', 'name', { unique: false });
+            itemStore.createIndex('code', 'code', { unique: false });
+        }
+        // カテゴリストア
+        if (!db.objectStoreNames.contains(CATEGORIES_STORE_NAME)) {
+            const categoryStore = db.createObjectStore(CATEGORIES_STORE_NAME, { keyPath: 'id' });
+            categoryStore.createIndex('name', 'name', { unique: true });
+        }
+        // 忘れ物記録ストア (dateをキーにする)
+        if (!db.objectStoreNames.contains(FORGOTTEN_RECORDS_STORE_NAME)) {
+            const forgottenStore = db.createObjectStore(FORGOTTEN_RECORDS_STORE_NAME, { keyPath: 'date' });
+            forgottenStore.createIndex('date_idx', 'date', { unique: true });
+        }
+        // 日付オーバーライドストア (dateをキーにする)
+        if (!db.objectStoreNames.contains(DATE_OVERRIDES_STORE_NAME)) {
+            db.createObjectStore(DATE_OVERRIDES_STORE_NAME, { keyPath: 'date' });
+        }
+    };
+});
+
+function openDB() {
+    return dbReadyPromise;
 }
 
 // アイテム CRUD操作
-function addItem(item) {
+async function addItem(item) {
+  await openDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(ITEMS_STORE_NAME, 'readwrite');
     const store = tx.objectStore(ITEMS_STORE_NAME);
@@ -50,7 +56,8 @@ function addItem(item) {
   });
 }
 
-function getAllItems() {
+async function getAllItems() {
+  await openDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(ITEMS_STORE_NAME, 'readonly');
     const store = tx.objectStore(ITEMS_STORE_NAME);
@@ -60,7 +67,8 @@ function getAllItems() {
   });
 }
 
-function updateItem(item) {
+async function updateItem(item) {
+  await openDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(ITEMS_STORE_NAME, 'readwrite');
     const store = tx.objectStore(ITEMS_STORE_NAME);
@@ -70,7 +78,8 @@ function updateItem(item) {
   });
 }
 
-function deleteItem(id) {
+async function deleteItem(id) {
+  await openDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(ITEMS_STORE_NAME, 'readwrite');
     const store = tx.objectStore(ITEMS_STORE_NAME);
@@ -80,7 +89,8 @@ function deleteItem(id) {
   });
 }
 
-function clearItems() {
+async function clearItems() {
+  await openDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(ITEMS_STORE_NAME, 'readwrite');
     const store = tx.objectStore(ITEMS_STORE_NAME);
@@ -91,7 +101,8 @@ function clearItems() {
 }
 
 // カテゴリ CRUD操作
-function addCategory(category) {
+async function addCategory(category) {
+  await openDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(CATEGORIES_STORE_NAME, 'readwrite');
     const store = tx.objectStore(CATEGORIES_STORE_NAME);
@@ -101,7 +112,8 @@ function addCategory(category) {
   });
 }
 
-function getAllCategories() {
+async function getAllCategories() {
+  await openDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(CATEGORIES_STORE_NAME, 'readonly');
     const store = tx.objectStore(CATEGORIES_STORE_NAME);
@@ -111,7 +123,8 @@ function getAllCategories() {
   });
 }
 
-function deleteCategory(id) {
+async function deleteCategory(id) {
+  await openDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(CATEGORIES_STORE_NAME, 'readwrite');
     const store = tx.objectStore(CATEGORIES_STORE_NAME);
@@ -121,7 +134,8 @@ function deleteCategory(id) {
   });
 }
 
-function clearCategories() {
+async function clearCategories() {
+    await openDB();
     return new Promise((resolve, reject) => {
         const tx = db.transaction(CATEGORIES_STORE_NAME, 'readwrite');
         const store = tx.objectStore(CATEGORIES_STORE_NAME);
@@ -132,7 +146,8 @@ function clearCategories() {
 }
 
 // 忘れ物記録 CRUD操作
-function addForgottenRecord(record) {
+async function addForgottenRecord(record) {
+  await openDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(FORGOTTEN_RECORDS_STORE_NAME, 'readwrite');
     const store = tx.objectStore(FORGOTTEN_RECORDS_STORE_NAME);
@@ -142,7 +157,8 @@ function addForgottenRecord(record) {
   });
 }
 
-function getAllForgottenRecords() {
+async function getAllForgottenRecords() {
+  await openDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(FORGOTTEN_RECORDS_STORE_NAME, 'readonly');
     const store = tx.objectStore(FORGOTTEN_RECORDS_STORE_NAME);
@@ -152,7 +168,8 @@ function getAllForgottenRecords() {
   });
 }
 
-function clearForgottenRecords() {
+async function clearForgottenRecords() {
+  await openDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(FORGOTTEN_RECORDS_STORE_NAME, 'readwrite');
     const store = tx.objectStore(FORGOTTEN_RECORDS_STORE_NAME);
@@ -162,7 +179,8 @@ function clearForgottenRecords() {
   });
 }
 
-function deleteForgottenRecord(date) {
+async function deleteForgottenRecord(date) {
+  await openDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(FORGOTTEN_RECORDS_STORE_NAME, 'readwrite');
     const store = tx.objectStore(FORGOTTEN_RECORDS_STORE_NAME);
@@ -172,7 +190,8 @@ function deleteForgottenRecord(date) {
   });
 }
 
-function deleteForgottenRecordsBefore(date) {
+async function deleteForgottenRecordsBefore(date) {
+  await openDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(FORGOTTEN_RECORDS_STORE_NAME, 'readwrite');
     const store = tx.objectStore(FORGOTTEN_RECORDS_STORE_NAME);
@@ -192,7 +211,8 @@ function deleteForgottenRecordsBefore(date) {
 }
 
 // 日付オーバーライド CRUD操作
-function getOverride(date) {
+async function getOverride(date) {
+  await openDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(DATE_OVERRIDES_STORE_NAME, 'readonly');
     const store = tx.objectStore(DATE_OVERRIDES_STORE_NAME);
@@ -202,11 +222,23 @@ function getOverride(date) {
   });
 }
 
-function saveOverride(override) {
+async function saveOverride(override) {
+  await openDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(DATE_OVERRIDES_STORE_NAME, 'readwrite');
     const store = tx.objectStore(DATE_OVERRIDES_STORE_NAME);
     const request = store.put(override);
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function deleteOverride(date) {
+  await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(DATE_OVERRIDES_STORE_NAME, 'readwrite');
+    const store = tx.objectStore(DATE_OVERRIDES_STORE_NAME);
+    const request = store.delete(date);
     request.onsuccess = () => resolve();
     request.onerror = () => reject(request.error);
   });

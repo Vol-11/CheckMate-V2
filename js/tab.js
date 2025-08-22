@@ -18,9 +18,6 @@ tabs.forEach(tab => {
 
     if (target === 'items') {
       renderItems();
-    } else if (target === 'check') {
-      if (!currentDay) selectCurrentDay();
-      updateCheckDisplay();
     } else if (target === 'settings') {
       updateDetailedStats();
     }

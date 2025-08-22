@@ -1,168 +1,251 @@
+// 日付をYYYY-MM-DD形式の文字列に変換 (calendar.jsからコピー)
+function toDateString(date) {
+    const year = date.getFullYear();
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const day = date.getDate().toString().padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
+let checklistDate = new Date(); // 現在のチェックリストの日付
+
 // チェック状況表示の統一化
 async function updateCheckDisplay() {
-  if (!currentDay) return;
-  const forgottenStats = await getForgottenItemStats();
-  renderChecklist(currentDay, forgottenStats);
-  renderScanChecklist(currentDay, forgottenStats);
+    if (!checklistDate) return;
+    const forgottenStats = await getForgottenItemStats();
+    const dateString = toDateString(checklistDate);
+    const dayOfWeek = ['日', '月', '火', '水', '木', '金', '土'][checklistDate.getDay()];
+
+    // overrideを取得
+    const override = await getOverride(dateString) || { added: [], removed: [] };
+
+    // 曜日に基づく通常のアイテムを取得し、overrideを適用
+    const regularItems = items.filter(item => item.days.includes(dayOfWeek) && !override.removed.includes(item.id));
+
+    // 特別なアイテムを追加
+    const specialItems = (override.added || []).map(item => ({
+        ...item,
+        isSpecial: true,
+    }));
+
+    const allItemsForDate = [...regularItems, ...specialItems];
+
+    renderChecklist(allItemsForDate, forgottenStats);
+    renderScanChecklist(allItemsForDate, forgottenStats);
 }
 
 // 手動チェックリスト表示
-function renderChecklist(day, forgottenStats) {
-  const list = document.getElementById('checklist');
-  const progress = document.getElementById('check-progress');
+function renderChecklist(allItems, forgottenStats) {
+    const list = document.getElementById('checklist');
+    const progress = document.getElementById('check-progress');
+    const dateString = toDateString(checklistDate);
 
-  const filtered = items.filter(i => i.days.includes(day));
+    if (allItems.length === 0) {
+        list.innerHTML = `<li class="text-center text-gray-500 dark:text-gray-400 py-8">${dateString} のアイテムはありません</li>`;
+        progress.innerHTML = '';
+        return;
+    }
 
-  if (filtered.length === 0) {
-    list.innerHTML = '<li class="text-center text-gray-500 dark:text-gray-400 py-8">' + day + '曜日のアイテムはありません</li>';
-    progress.innerHTML = '';
-    return;
-  }
+    const checkedCount = allItems.filter(i => i.checked).length;
+    const totalCount = allItems.length;
+    const percentage = totalCount > 0 ? Math.round((checkedCount / totalCount) * 100) : 0;
 
-  const checkedCount = filtered.filter(i => i.checked).length;
-  const totalCount = filtered.length;
-  const percentage = Math.round((checkedCount / totalCount) * 100);
-
-  progress.innerHTML = `
+    progress.innerHTML = `
     <div class="${checkedCount === totalCount ? 'text-green-600 dark:text-green-400' : 'text-blue-600 dark:text-blue-400'}">
-      ${day}曜日: ${checkedCount}/${totalCount} 完了 (${percentage}%) ${checkedCount === totalCount ? '🎉' : ''}
+      ${dateString}: ${checkedCount}/${totalCount} 完了 (${percentage}%) ${checkedCount === totalCount ? '🎉' : ''}
     </div>
   `;
 
-  list.innerHTML = '';
+    list.innerHTML = '';
 
-  filtered.sort((a, b) => {
-    const priorities = { '必須': 3, '重要': 2, '普通': 1 };
-    return priorities[b.priority] - priorities[a.priority];
-  });
+    // 通常アイテムを優先度でソート
+    const sortedItems = allItems.sort((a, b) => {
+        if (a.isSpecial && !b.isSpecial) return 1;
+        if (!a.isSpecial && b.isSpecial) return -1;
+        if (a.isSpecial && b.isSpecial) return 0;
+        const priorities = { '必須': 3, '重要': 2, '普通': 1 };
+        return priorities[b.priority] - priorities[a.priority];
+    });
 
-  filtered.forEach(item => {
-    // ★修正点: forgottenStatsを渡す
-    const li = createItemElement(item, true, forgottenStats);
-    list.appendChild(li);
-  });
+    sortedItems.forEach(item => {
+        let li;
+        if (item.isSpecial) {
+            li = document.createElement('li');
+            li.className = 'flex items-center p-3 rounded-lg bg-yellow-100 dark:bg-yellow-800/50';
+            li.innerHTML = `
+                <label class="flex items-center w-full cursor-pointer">
+                    <input type="checkbox" data-special-id="${item.id}" ${item.checked ? 'checked' : ''} class="w-5 h-5 text-blue-600 rounded focus:ring-blue-500 dark:bg-gray-600 border-gray-400 special-item-checkbox">
+                    <span class="ml-4 font-medium text-gray-900 dark:text-gray-100">✨ ${item.name}</span>
+                </label>
+            `;
+        } else {
+            li = createItemElement(item, true, forgottenStats);
+        }
+        list.appendChild(li);
+    });
 }
 
 // スキャンモード用チェックリスト表示
-function renderScanChecklist(day, forgottenStats) {
-  const list = document.getElementById('scan-checklist');
-  const progress = document.getElementById('scan-check-progress');
+function renderScanChecklist(allItems, forgottenStats) {
+    const list = document.getElementById('scan-checklist');
+    const progress = document.getElementById('scan-check-progress');
+    const dateString = toDateString(checklistDate);
 
-  const filtered = items.filter(i => i.days.includes(day));
+    if (allItems.length === 0) {
+        list.innerHTML = `<li class="text-center text-gray-500 dark:text-gray-400 py-8">${dateString} のアイテムはありません</li>`;
+        progress.innerHTML = '';
+        return;
+    }
 
-  if (filtered.length === 0) {
-    list.innerHTML = '<li class="text-center text-gray-500 dark:text-gray-400 py-8">' + day + '曜日のアイテムはありません</li>';
-    progress.innerHTML = '';
-    return;
-  }
+    const checkedCount = allItems.filter(i => i.checked).length;
+    const totalCount = allItems.length;
+    const percentage = totalCount > 0 ? Math.round((checkedCount / totalCount) * 100) : 0;
 
-  const checkedCount = filtered.filter(i => i.checked).length;
-  const totalCount = filtered.length;
-  const percentage = Math.round((checkedCount / totalCount) * 100);
-
-  progress.innerHTML = `
+    progress.innerHTML = `
     <div class="${checkedCount === totalCount ? 'text-green-600 dark:text-green-400' : 'text-blue-600 dark:text-blue-400'}">
-      ${day}曜日: ${checkedCount}/${totalCount} 完了 (${percentage}%) ${checkedCount === totalCount ? '🎉' : ''}
+      ${dateString}: ${checkedCount}/${totalCount} 完了 (${percentage}%) ${checkedCount === totalCount ? '🎉' : ''}
     </div>
   `;
 
-  list.innerHTML = '';
+    list.innerHTML = '';
+    
+    const sortedItems = allItems.sort((a, b) => {
+        if (a.isSpecial && !b.isSpecial) return 1;
+        if (!a.isSpecial && b.isSpecial) return -1;
+        if (a.isSpecial && b.isSpecial) return 0;
+        const priorities = { '必須': 3, '重要': 2, '普通': 1 };
+        return priorities[b.priority] - priorities[a.priority];
+    });
 
-  filtered.sort((a, b) => {
-    const priorities = { '必須': 3, '重要': 2, '普通': 1 };
-    return priorities[b.priority] - priorities[a.priority];
-  });
-
-  filtered.forEach(item => {
-    // ★修正点: forgottenStatsを渡す
-    const li = createItemElement(item, true, forgottenStats);
-    list.appendChild(li);
-  });
+    sortedItems.forEach(item => {
+        let li;
+        if (item.isSpecial) {
+            li = document.createElement('li');
+            li.className = 'flex items-center p-3 rounded-lg bg-yellow-100 dark:bg-yellow-800/50';
+            li.innerHTML = `
+                <label class="flex items-center w-full cursor-pointer">
+                    <input type="checkbox" data-special-id="${item.id}" ${item.checked ? 'checked' : ''} class="w-5 h-5 text-blue-600 rounded focus:ring-blue-500 dark:bg-gray-600 border-gray-400 special-item-checkbox">
+                    <span class="ml-4 font-medium text-gray-900 dark:text-gray-100">✨ ${item.name}</span>
+                </label>
+            `;
+        } else {
+            li = createItemElement(item, true, forgottenStats);
+        }
+        list.appendChild(li);
+    });
 }
 
-// チェックリスト機能
-function selectCurrentDay() {
-  const days = ['日', '月', '火', '水', '木', '金', '土'];
-  const today = days[new Date().getDay()];
-  currentDay = today;
+// チェックリストの初期化
+function initializeChecklist() {
+    const datePicker = document.getElementById('check-date-picker');
 
-  document.querySelectorAll('.preset-btn').forEach(btn => {
-    btn.classList.remove('bg-blue-600', 'text-white');
-    btn.classList.add('text-blue-600', 'dark:text-blue-400', 'bg-white', 'dark:bg-gray-800', 'hover:bg-blue-50', 'dark:hover:bg-gray-700');
-    if (btn.dataset.day === today) {
-      btn.classList.add('bg-blue-600', 'text-white');
-      btn.classList.remove('text-blue-600', 'dark:text-blue-400', 'bg-white', 'dark:bg-gray-800', 'hover:bg-blue-50', 'dark:hover:bg-gray-700');
-    }
-  });
+    // デフォルトを明日に設定
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    checklistDate = tomorrow;
+    datePicker.value = toDateString(tomorrow);
 
-  updateCheckDisplay();
+    // 日付ピッカーのイベントリスナー
+    datePicker.addEventListener('change', () => {
+        const [year, month, day] = datePicker.value.split('-').map(Number);
+        checklistDate = new Date(year, month - 1, day);
+        updateCheckDisplay();
+    });
+
+    // 特別なアイテムのチェック処理
+    const handleSpecialItemCheck = async (e) => {
+        if (e.target.classList.contains('special-item-checkbox')) {
+            const specialId = parseInt(e.target.dataset.specialId);
+            const isChecked = e.target.checked;
+            const dateString = toDateString(checklistDate);
+            
+            const override = await getOverride(dateString) || { added: [], removed: [] };
+            const itemIndex = override.added.findIndex(item => item.id === specialId);
+            if (itemIndex > -1) {
+                override.added[itemIndex].checked = isChecked;
+                await saveOverride(override);
+                await updateCheckDisplay(); // リストを再描画
+            }
+        }
+    };
+    document.getElementById('checklist').addEventListener('change', handleSpecialItemCheck);
+    document.getElementById('scan-checklist').addEventListener('change', handleSpecialItemCheck);
 }
+
 
 // 手動モード チェックリスト操作
 document.getElementById('check-all').addEventListener('click', async () => {
-  await performCheckAll();
+  await performCheckAll(true);
 });
 
 document.getElementById('uncheck-all').addEventListener('click', async () => {
-  await performUncheckAll();
+  await performCheckAll(false);
 });
 
 document.getElementById('reset-check').addEventListener('click', async () => {
-  await performResetCheck();
+  if (confirm('表示されている日の全てのアイテムのチェック状態をリセットしますか？')) {
+    await performCheckAll(false); // uncheck all is a form of reset
+    showStatus('🔄 チェック状態をリセットしました', 'success');
+  }
 });
 
 // スキャンモード チェックリスト操作
 document.getElementById('scan-check-all').addEventListener('click', async () => {
-  await performCheckAll();
+  await performCheckAll(true);
 });
 
 document.getElementById('scan-uncheck-all').addEventListener('click', async () => {
-  await performUncheckAll();
+  await performCheckAll(false);
 });
 
 document.getElementById('scan-reset-check').addEventListener('click', async () => {
-  await performResetCheck();
+  if (confirm('表示されている日の全てのアイテムのチェック状態をリセットしますか？')) {
+    await performCheckAll(false);
+    showStatus('🔄 チェック状態をリセットしました', 'success');
+  }
 });
 
 // 共通チェック操作関数
-async function performCheckAll() {
-  const dayItems = items.filter(i => i.days.includes(currentDay));
-  for (const item of dayItems) {
-    if (!item.checked) {
-      item.checked = true;
-      await updateItem(item);
+async function performCheckAll(checkState) {
+    const dateString = toDateString(checklistDate);
+    const dayOfWeek = ['日', '月', '火', '水', '木', '金', '土'][checklistDate.getDay()];
+    const override = await getOverride(dateString) || { date: dateString, added: [], removed: [] };
+
+    // 通常アイテムの更新
+    const regularItems = items.filter(item => item.days.includes(dayOfWeek) && !override.removed.includes(item.id));
+    for (const item of regularItems) {
+        if (item.checked !== checkState) {
+            item.checked = checkState;
+            await updateItem(item);
+        }
     }
-  }
-  updateCheckDisplay();
-  updateStats();
-  if (navigator.vibrate) navigator.vibrate([100, 50, 100, 50, 100]);
+
+    // 特別アイテムの更新
+    let overrideChanged = false;
+    if (!override.added) override.added = [];
+    override.added.forEach(item => {
+        if (item.checked !== checkState) {
+            item.checked = checkState;
+            overrideChanged = true;
+        }
+    });
+
+    if (overrideChanged) {
+        await saveOverride(override);
+    }
+
+    await updateCheckDisplay();
+    await updateStats();
+    if (checkState && navigator.vibrate) navigator.vibrate([100, 50, 100, 50, 100]);
 }
 
-async function performUncheckAll() {
-  const dayItems = items.filter(i => i.days.includes(currentDay));
-  for (const item of dayItems) {
-    if (item.checked) {
-      item.checked = false;
-      await updateItem(item);
+// 初期化呼び出し
+document.addEventListener('DOMContentLoaded', () => {
+    initializeChecklist();
+});
+
+// `tab.js`から呼び出されるための処理
+document.addEventListener('tabChanged', e => {
+    if (e.detail.tab === 'check') {
+        updateCheckDisplay();
     }
-  }
-  updateCheckDisplay();
-  updateStats();
-}
-
-async function performResetCheck() {
-  if (confirm('全てのアイテムのチェック状態をリセットしますか？')) {
-    for (const item of items) {
-      item.checked = false;
-      await updateItem(item);
-    }
-    renderItems();
-    updateCheckDisplay();
-    updateStats();
-    scanResults.clear();
-    renderScanResults();
-    showStatus('🔄 チェック状態をリセットしました', 'success');
-  }
-}
-
-
+});

@@ -940,7 +940,7 @@ async function loadCategoriesAndInitialize() {
 openDB().then(async () => {
   await loadCategoriesAndInitialize(); // カテゴリを先に読み込み
   await loadItems();
-  selectCurrentDay();
+  
   
   if (items.length === 0) {
     setTimeout(() => {
