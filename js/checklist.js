@@ -238,10 +238,7 @@ async function performCheckAll(checkState) {
     if (checkState && navigator.vibrate) navigator.vibrate([100, 50, 100, 50, 100]);
 }
 
-// 初期化呼び出し
-document.addEventListener('DOMContentLoaded', () => {
-    initializeChecklist();
-});
+
 
 // `tab.js`から呼び出されるための処理
 document.addEventListener('tabChanged', e => {

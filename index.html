@@ -739,23 +739,7 @@ function renderScanResults() {
   });
 }
 
-// 曜日選択
-document.getElementById('preset-days').addEventListener('click', e => {
-  if (e.target.classList.contains('preset-btn')) {
-    currentDay = e.target.dataset.day;
-    
-    document.querySelectorAll('.preset-btn').forEach(btn => {
-      btn.classList.remove('bg-blue-600', 'text-white');
-      btn.classList.add('text-blue-600', 'dark:text-blue-400', 'bg-white', 'dark:bg-gray-800', 'hover:bg-blue-50', 'dark:hover:bg-gray-700');
-    });
-    e.target.classList.add('bg-blue-600', 'text-white');
-    e.target.classList.remove('text-blue-600', 'dark:text-blue-400', 'bg-white', 'dark:bg-gray-800', 'hover:bg-blue-50', 'dark:hover:bg-gray-700');
-    
-    updateCheckDisplay();
-    scanResults.clear();
-    renderScanResults();
-  }
-});
+
 
 // 編集モーダル
 function openEditModal(item) {
@@ -956,7 +940,8 @@ async function loadCategoriesAndInitialize() {
 openDB().then(async () => {
   await loadCategoriesAndInitialize(); // カテゴリを先に読み込み
   await loadItems();
-  
+  initializeChecklist();
+  await updateCheckDisplay();
   
   if (items.length === 0) {
     setTimeout(() => {

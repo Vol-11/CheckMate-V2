@@ -5,17 +5,15 @@ const ITEMS_STORE_NAME = 'items';
 const CATEGORIES_STORE_NAME = 'categories';
 const FORGOTTEN_RECORDS_STORE_NAME = 'forgotten_records';
 const DATE_OVERRIDES_STORE_NAME = 'date_overrides'; 
-let db;
 
 const dbReadyPromise = new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
     request.onerror = () => reject(request.error);
-    request.onsuccess = () => {
-        db = request.result;
-        resolve(db);
+    request.onsuccess = (event) => {
+        resolve(event.target.result);
     };
     request.onupgradeneeded = e => {
-        db = e.target.result;
+        const db = e.target.result;
         // アイテムストア
         if (!db.objectStoreNames.contains(ITEMS_STORE_NAME)) {
             const itemStore = db.createObjectStore(ITEMS_STORE_NAME, { keyPath: 'id', autoIncrement: true });
@@ -46,7 +44,7 @@ function openDB() {
 
 // アイテム CRUD操作
 async function addItem(item) {
-  await openDB();
+  const db = await openDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(ITEMS_STORE_NAME, 'readwrite');
     const store = tx.objectStore(ITEMS_STORE_NAME);
@@ -57,7 +55,7 @@ async function addItem(item) {
 }
 
 async function getAllItems() {
-  await openDB();
+  const db = await openDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(ITEMS_STORE_NAME, 'readonly');
     const store = tx.objectStore(ITEMS_STORE_NAME);
@@ -68,7 +66,7 @@ async function getAllItems() {
 }
 
 async function updateItem(item) {
-  await openDB();
+  const db = await openDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(ITEMS_STORE_NAME, 'readwrite');
     const store = tx.objectStore(ITEMS_STORE_NAME);
@@ -79,7 +77,7 @@ async function updateItem(item) {
 }
 
 async function deleteItem(id) {
-  await openDB();
+  const db = await openDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(ITEMS_STORE_NAME, 'readwrite');
     const store = tx.objectStore(ITEMS_STORE_NAME);
@@ -90,7 +88,7 @@ async function deleteItem(id) {
 }
 
 async function clearItems() {
-  await openDB();
+  const db = await openDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(ITEMS_STORE_NAME, 'readwrite');
     const store = tx.objectStore(ITEMS_STORE_NAME);
@@ -102,7 +100,7 @@ async function clearItems() {
 
 // カテゴリ CRUD操作
 async function addCategory(category) {
-  await openDB();
+  const db = await openDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(CATEGORIES_STORE_NAME, 'readwrite');
     const store = tx.objectStore(CATEGORIES_STORE_NAME);
@@ -113,7 +111,7 @@ async function addCategory(category) {
 }
 
 async function getAllCategories() {
-  await openDB();
+  const db = await openDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(CATEGORIES_STORE_NAME, 'readonly');
     const store = tx.objectStore(CATEGORIES_STORE_NAME);
@@ -124,7 +122,7 @@ async function getAllCategories() {
 }
 
 async function deleteCategory(id) {
-  await openDB();
+  const db = await openDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(CATEGORIES_STORE_NAME, 'readwrite');
     const store = tx.objectStore(CATEGORIES_STORE_NAME);
@@ -135,7 +133,7 @@ async function deleteCategory(id) {
 }
 
 async function clearCategories() {
-    await openDB();
+    const db = await openDB();
     return new Promise((resolve, reject) => {
         const tx = db.transaction(CATEGORIES_STORE_NAME, 'readwrite');
         const store = tx.objectStore(CATEGORIES_STORE_NAME);
@@ -147,7 +145,7 @@ async function clearCategories() {
 
 // 忘れ物記録 CRUD操作
 async function addForgottenRecord(record) {
-  await openDB();
+  const db = await openDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(FORGOTTEN_RECORDS_STORE_NAME, 'readwrite');
     const store = tx.objectStore(FORGOTTEN_RECORDS_STORE_NAME);
@@ -158,7 +156,7 @@ async function addForgottenRecord(record) {
 }
 
 async function getAllForgottenRecords() {
-  await openDB();
+  const db = await openDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(FORGOTTEN_RECORDS_STORE_NAME, 'readonly');
     const store = tx.objectStore(FORGOTTEN_RECORDS_STORE_NAME);
@@ -169,7 +167,7 @@ async function getAllForgottenRecords() {
 }
 
 async function clearForgottenRecords() {
-  await openDB();
+  const db = await openDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(FORGOTTEN_RECORDS_STORE_NAME, 'readwrite');
     const store = tx.objectStore(FORGOTTEN_RECORDS_STORE_NAME);
@@ -180,7 +178,7 @@ async function clearForgottenRecords() {
 }
 
 async function deleteForgottenRecord(date) {
-  await openDB();
+  const db = await openDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(FORGOTTEN_RECORDS_STORE_NAME, 'readwrite');
     const store = tx.objectStore(FORGOTTEN_RECORDS_STORE_NAME);
@@ -191,7 +189,7 @@ async function deleteForgottenRecord(date) {
 }
 
 async function deleteForgottenRecordsBefore(date) {
-  await openDB();
+  const db = await openDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(FORGOTTEN_RECORDS_STORE_NAME, 'readwrite');
     const store = tx.objectStore(FORGOTTEN_RECORDS_STORE_NAME);
@@ -212,7 +210,7 @@ async function deleteForgottenRecordsBefore(date) {
 
 // 日付オーバーライド CRUD操作
 async function getOverride(date) {
-  await openDB();
+  const db = await openDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(DATE_OVERRIDES_STORE_NAME, 'readonly');
     const store = tx.objectStore(DATE_OVERRIDES_STORE_NAME);
@@ -223,7 +221,7 @@ async function getOverride(date) {
 }
 
 async function saveOverride(override) {
-  await openDB();
+  const db = await openDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(DATE_OVERRIDES_STORE_NAME, 'readwrite');
     const store = tx.objectStore(DATE_OVERRIDES_STORE_NAME);
@@ -234,7 +232,7 @@ async function saveOverride(override) {
 }
 
 async function deleteOverride(date) {
-  await openDB();
+  const db = await openDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(DATE_OVERRIDES_STORE_NAME, 'readwrite');
     const store = tx.objectStore(DATE_OVERRIDES_STORE_NAME);
