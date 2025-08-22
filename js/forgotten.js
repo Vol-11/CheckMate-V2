@@ -73,43 +73,91 @@ async function saveTodayForgottenItems() {
 }
 
 async function renderForgottenHistoryMode() {
-  const forgottenStatsEl = document.getElementById('forgotten-stats');
-  const records = await getAllForgottenRecords();
-  if (records.length === 0) {
-    forgottenStatsEl.innerHTML = '';
-    forgottenListEl.innerHTML = '<div class="text-center text-gray-500 dark:text-gray-400 py-8">まだ忘れ物の記録はありません。</div>';
-    return;
-  }
-  const allForgottenItemIds = records.flatMap(r => r.forgottenItems);
-  const forgottenCounts = allForgottenItemIds.reduce((acc, id) => {
-    acc[id] = (acc[id] || 0) + 1;
-    return acc;
-  }, {});
-  const mostForgottenItems = Object.entries(forgottenCounts)
-    .sort(([, a], [, b]) => b - a)
-    .slice(0, 5)
-    .map(([id, count]) => ({ item: items.find(i => i.id === parseInt(id)), count }));
-  let statsHtml = '<ul class="space-y-2">';
-if (mostForgottenItems.length > 0) {
-  mostForgottenItems.forEach(({ item, count }) => {
-    if (item) {
-      statsHtml += `
-        <li class="flex justify-between items-center bg-orange-50 dark:bg-orange-900/30 p-3 rounded-lg">
-          <span class="font-medium">${getCategoryIcon(item.category)} ${item.name}</span>
-          <span class="font-bold text-orange-600 dark:text-orange-400 text-lg">${count}回</span>
-        </li>
-      `;
+    const forgottenStatsEl = document.getElementById('forgotten-stats');
+    const records = await getAllForgottenRecords();
+
+    // 履歴がない場合はメッセージ表示
+    if (records.length === 0) {
+        forgottenStatsEl.innerHTML = '';
+        forgottenListEl.innerHTML = '<div class="text-center text-gray-500 dark:text-gray-400 py-8">まだ忘れ物の記録はありません。</div>';
+        return;
     }
-  });
-} else {
-  statsHtml += '<li class="text-gray-500 dark:text-gray-400">統計データがありません</li>';
-}
-  statsHtml += '</ul>';
-  forgottenStatsEl.innerHTML = statsHtml;
-  let listHtml = '<ul class="space-y-4">';
-  records.sort((a, b) => new Date(b.date) - new Date(a.date));
-  records.forEach(record => {
-    listHtml += `
+
+    const stats = await getForgottenStats();
+    let statsHtml = '<div class="space-y-6">';
+
+    // 1. サマリー
+    statsHtml += `
+        <div class="text-center bg-gray-100 dark:bg-gray-700 p-4 rounded-lg">
+            <p class="text-lg">総忘れ物回数: <span class="font-bold text-2xl text-orange-500">${stats.totalForgottenItems}</span> 回</p>
+            <p class="text-sm text-gray-600 dark:text-gray-400">（全 ${stats.totalRecords} 日の記録）</p>
+        </div>
+    `;
+
+    // 2. 忘れ物ワーストランキング
+    const sortedItems = Object.values(stats.byItem).sort((a, b) => b.count - a.count);
+    if (sortedItems.length > 0) {
+        statsHtml += '<div><h4 class="text-lg font-semibold mb-3">😱 忘れ物ワーストランキング</h4><ul class="space-y-2">';
+        sortedItems.forEach((item, index) => {
+            statsHtml += `
+                <li class="flex items-center bg-white dark:bg-gray-800 p-3 rounded-lg shadow-sm">
+                    <span class="text-lg font-bold w-8 text-center">${index + 1}</span>
+                    <span class="flex-1 font-medium">${getCategoryIcon(item.category)} ${item.name}</span>
+                    <span class="font-bold text-orange-600 dark:text-orange-400 text-lg">${item.count}回</span>
+                </li>
+            `;
+        });
+        statsHtml += '</ul></div>';
+    }
+
+    // 3. カテゴリ別棒グラフ
+    const sortedCategories = Object.entries(stats.byCategory).sort(([,a],[,b]) => b.count - a.count);
+    if (sortedCategories.length > 0) {
+        const maxCategoryCount = Math.max(...sortedCategories.map(([,cat]) => cat.count));
+        statsHtml += '<div><h4 class="text-lg font-semibold mb-3">📊 カテゴリ別忘れ物</h4><div class="space-y-3">';
+        sortedCategories.forEach(([name, category]) => {
+            const width = maxCategoryCount > 0 ? (category.count / maxCategoryCount) * 100 : 0;
+            statsHtml += `
+                <div class="grid grid-cols-4 gap-2 items-center">
+                    <span class="col-span-1 text-sm font-medium truncate">${getCategoryIcon(name)} ${name}</span>
+                    <div class="col-span-3 bg-gray-200 dark:bg-gray-700 rounded-full h-6">
+                        <div class="bg-blue-600 h-6 rounded-full text-white text-xs font-medium flex items-center justify-end pr-2" style="width: ${width}%">${category.count}</div>
+                    </div>
+                </div>
+            `;
+        });
+        statsHtml += '</div></div>';
+    }
+
+    // 4. 曜日別棒グラフ
+    const dayOrder = ['月', '火', '水', '木', '金', '土', '日'];
+    const dayStats = Object.entries(stats.byDayOfWeek);
+    if (dayStats.some(([,count])=> count > 0)) {
+        const maxDayCount = Math.max(...dayStats.map(([,count]) => count));
+        statsHtml += '<div><h4 class="text-lg font-semibold mb-3">📅 曜日別忘れ物</h4><div class="space-y-3">';
+        dayOrder.forEach(day => {
+            const count = stats.byDayOfWeek[day] || 0;
+            const width = maxDayCount > 0 ? (count / maxDayCount) * 100 : 0;
+            statsHtml += `
+                 <div class="grid grid-cols-4 gap-2 items-center">
+                    <span class="col-span-1 text-sm font-medium">${day}曜日</span>
+                    <div class="col-span-3 bg-gray-200 dark:bg-gray-700 rounded-full h-6">
+                        <div class="bg-green-600 h-6 rounded-full text-white text-xs font-medium flex items-center justify-end pr-2" style="width: ${width}%">${count}</div>
+                    </div>
+                </div>
+            `;
+        });
+        statsHtml += '</div></div>';
+    }
+
+    statsHtml += '</div>';
+    forgottenStatsEl.innerHTML = statsHtml;
+
+    // 履歴リストの描画（変更なし）
+    let listHtml = '<ul class="space-y-4">';
+    records.sort((a, b) => new Date(b.date) - new Date(a.date));
+    records.forEach(record => {
+        listHtml += `
       <li class="bg-gray-50 dark:bg-gray-700/50 p-4 rounded-lg shadow-sm">
         <details>
           <summary class="flex justify-between items-center font-semibold cursor-pointer text-lg">
@@ -118,24 +166,24 @@ if (mostForgottenItems.length > 0) {
           </summary>
           <ul class="mt-3 space-y-2 pl-4 border-l-2 border-gray-200 dark:border-gray-600">
     `;
-    record.forgottenItems.forEach(itemId => {
-      const item = items.find(i => i.id === itemId);
-      if (item) {
-        listHtml += `
+        record.forgottenItems.forEach(itemId => {
+            const item = items.find(i => i.id === itemId);
+            if (item) {
+                listHtml += `
           <li class="flex items-center text-base">
             <span class="mr-3">${getCategoryIcon(item.category)}</span>
             <span>${item.name}</span>
           </li>
         `;
-      } else {
-        listHtml += `<li class="flex items-center text-gray-500">削除されたアイテム (ID: ${itemId})</li>`;
-      }
+            } else {
+                listHtml += `<li class="flex items-center text-gray-500">削除されたアイテム (ID: ${itemId})</li>`;
+            }
+        });
+        listHtml += '</ul></details></li>';
     });
-    listHtml += '</ul></details></li>';
-  });
-  listHtml += '</ul>';
-  forgottenListEl.innerHTML = listHtml;
-}
+    listHtml += '</ul>';
+    forgottenListEl.innerHTML = listHtml;
+}''
 
 function showUndoToast(message, onUndo) {
     const statusMsg = document.getElementById('status-msg');
