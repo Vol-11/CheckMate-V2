@@ -12,9 +12,12 @@ const dateSpecificChecklist = document.getElementById('date-specific-checklist')
 const specialItemNameInput = document.getElementById('special-item-name');
 const addSpecialItemBtn = document.getElementById('add-special-item-btn');
 
-// 日付をYYYY-MM-DD形式の文字列に変換
+// 日付をYYYY-MM-DD形式の文字列に変換 (タイムゾーン問題を修正)
 function toDateString(date) {
-    return date.toISOString().split('T')[0];
+    const year = date.getFullYear();
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const day = date.getDate().toString().padStart(2, '0');
+    return `${year}-${month}-${day}`;
 }
 
 // カレンダーの描画
@@ -54,7 +57,7 @@ async function renderCalendar() {
         dayEl.className = 'p-2 rounded-full hover:bg-blue-100 dark:hover:bg-blue-800 transition-colors duration-200';
 
         const today = new Date();
-        if (i === today.getDate() && month === today.getMonth() && year === today.getFullYear()) {
+        if (dateStr === toDateString(today)) {
             dayEl.classList.add('bg-blue-600', 'text-white', 'font-bold');
         }
         if (dateStr === selectedDate) {
@@ -111,6 +114,8 @@ async function renderDateSpecificChecklist(dateStr) {
 
 // イベントリスナー
 function initializeCalendar() {
+    let isCalendarFirstLoad = true; // 初回読み込みフラグ
+
     prevMonthBtn.addEventListener('click', () => {
         calendarDate.setMonth(calendarDate.getMonth() - 1);
         renderCalendar();
@@ -163,6 +168,12 @@ function initializeCalendar() {
 
     document.addEventListener('tabChanged', e => {
         if (e.detail.tab === 'calendar') {
+            // 初回表示時に今日の日付のリストを表示
+            if (isCalendarFirstLoad) {
+                const todayStr = toDateString(new Date());
+                renderDateSpecificChecklist(todayStr);
+                isCalendarFirstLoad = false;
+            }
             renderCalendar();
         }
     });
