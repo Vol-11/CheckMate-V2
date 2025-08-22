@@ -37,12 +37,12 @@ function renderForgottenRecordingMode() {
   todayItems.forEach(item => {
     const li = document.createElement('li');
     li.className = 'flex items-center p-3 bg-white dark:bg-gray-700 border-2 border-gray-300 dark:border-gray-600 rounded-lg transition-colors duration-200 hover:border-blue-500';
-    li.innerHTML = '
+    li.innerHTML = `
       <label class="flex items-center w-full cursor-pointer">
         <input type="checkbox" data-id="${item.id}" class="w-5 h-5 text-orange-600 rounded focus:ring-orange-500 dark:bg-gray-600 border-gray-400">
         <span class="ml-4 text-gray-900 dark:text-gray-100 font-medium">${item.name}</span>
       </label>
-    ';
+    `;
     todayChecklist.appendChild(li);
   });
 }
@@ -90,26 +90,26 @@ async function renderForgottenHistoryMode() {
     .slice(0, 5)
     .map(([id, count]) => ({ item: items.find(i => i.id === parseInt(id)), count }));
   let statsHtml = '<ul class="space-y-2">';
-  if (mostForgottenItems.length > 0) {
-    mostForgottenItems.forEach(({ item, count }) => {
-      if (item) {
-        statsHtml += '
-          <li class="flex justify-between items-center bg-orange-50 dark:bg-orange-900/30 p-3 rounded-lg">
-            <span class="font-medium">${getCategoryIcon(item.category)} ${item.name}</span>
-            <span class="font-bold text-orange-600 dark:text-orange-400 text-lg">${count}回</span>
-          </li>
-        ';
-      }
-    });
-  } else {
-    statsHtml += '<li class="text-gray-500 dark:text-gray-400">統計データがありません</li>';
-  }
+if (mostForgottenItems.length > 0) {
+  mostForgottenItems.forEach(({ item, count }) => {
+    if (item) {
+      statsHtml += `
+        <li class="flex justify-between items-center bg-orange-50 dark:bg-orange-900/30 p-3 rounded-lg">
+          <span class="font-medium">${getCategoryIcon(item.category)} ${item.name}</span>
+          <span class="font-bold text-orange-600 dark:text-orange-400 text-lg">${count}回</span>
+        </li>
+      `;
+    }
+  });
+} else {
+  statsHtml += '<li class="text-gray-500 dark:text-gray-400">統計データがありません</li>';
+}
   statsHtml += '</ul>';
   forgottenStatsEl.innerHTML = statsHtml;
   let listHtml = '<ul class="space-y-4">';
   records.sort((a, b) => new Date(b.date) - new Date(a.date));
   records.forEach(record => {
-    listHtml += '
+    listHtml += `
       <li class="bg-gray-50 dark:bg-gray-700/50 p-4 rounded-lg shadow-sm">
         <details>
           <summary class="flex justify-between items-center font-semibold cursor-pointer text-lg">
@@ -117,18 +117,18 @@ async function renderForgottenHistoryMode() {
             <button class="delete-record-btn p-1 text-xl text-red-500 hover:text-red-700" data-date="${record.date}" title="この日の記録を削除">🗑️</button>
           </summary>
           <ul class="mt-3 space-y-2 pl-4 border-l-2 border-gray-200 dark:border-gray-600">
-    ';
+    `;
     record.forgottenItems.forEach(itemId => {
       const item = items.find(i => i.id === itemId);
       if (item) {
-        listHtml += '
+        listHtml += `
           <li class="flex items-center text-base">
             <span class="mr-3">${getCategoryIcon(item.category)}</span>
             <span>${item.name}</span>
           </li>
-        ';
+        `;
       } else {
-        listHtml += '<li class="flex items-center text-gray-500">削除されたアイテム (ID: ${itemId})</li>';
+        listHtml += `<li class="flex items-center text-gray-500">削除されたアイテム (ID: ${itemId})</li>`;
       }
     });
     listHtml += '</ul></details></li>';
