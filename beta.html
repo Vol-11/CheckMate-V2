@@ -7,13 +7,43 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
     <script src="https://unpkg.com/@ericblade/quagga2/dist/quagga.min.js"></script>
-    <script src="https://webrtc.github.io/adapter/adapter-latest.js"></script>
+    <style>
+        #interactive video {
+            width: 100%;
+            max-width: 640px;
+            height: auto;
+        }
+        #interactive canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+        .viewport {
+            position: relative;
+        }
+    </style>
 </head>
 <body class="bg-gray-100 min-h-screen py-8">
     <div class="container mx-auto px-4 max-w-4xl">
         <h1 class="text-3xl font-bold text-center text-gray-800 mb-8">
             Quagga vs Quagga2 ベンチマーク
         </h1>
+        
+        <!-- HTTPS警告 -->
+        <div id="httpsWarning" class="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6 hidden">
+            <div class="flex">
+                <div class="flex-shrink-0">
+                    <svg class="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+                    </svg>
+                </div>
+                <div class="ml-3">
+                    <p class="text-sm text-yellow-700">
+                        カメラアクセスにはHTTPS接続が必要です。localhostまたはHTTPS環境でご利用ください。
+                    </p>
+                </div>
+            </div>
+        </div>
         
         <!-- 設定パネル -->
         <div class="bg-white rounded-lg shadow-lg p-6 mb-6">
@@ -40,7 +70,6 @@
                         <option value="640x480">640x480</option>
                         <option value="800x600">800x600</option>
                         <option value="1280x720">1280x720 (HD)</option>
-                        <option value="1920x1080">1920x1080 (FHD)</option>
                     </select>
                 </div>
                 
@@ -63,7 +92,7 @@
                         カメラ
                     </label>
                     <select id="cameraSelect" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
-                        <option value="">カメラを検出中...</option>
+                        <option value="">デフォルト</option>
                     </select>
                 </div>
             </div>
@@ -88,10 +117,10 @@
         <!-- カメラプレビュー -->
         <div class="bg-white rounded-lg shadow-lg p-6 mb-6">
             <h2 class="text-xl font-semibold mb-4">カメラプレビュー</h2>
-            <div id="scanner-container" class="flex justify-center">
+            <div class="flex justify-center">
                 <div id="interactive" class="viewport border-2 border-gray-300 rounded-lg overflow-hidden" 
-                     style="max-width: 100%; height: 400px; position: relative;">
-                    <div class="flex items-center justify-center h-full text-gray-500">
+                     style="width: 100%; max-width: 640px; height: 480px; position: relative;">
+                    <div class="flex items-center justify-center h-full text-gray-500" id="placeholder">
                         カメラを開始してください
                     </div>
                 </div>
@@ -145,7 +174,7 @@
             <!-- 統計情報 -->
             <div id="statsSection" class="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6 hidden">
                 <div class="bg-yellow-50 p-4 rounded-lg">
-                    <h3 class="font-semibold text-yellow-800 mb-2">平均カメラ起動時間</h3>
+                    <h3 class="font-semibent text-yellow-800 mb-2">平均カメラ起動時間</h3>
                     <p id="avgCameraTime" class="text-xl font-bold text-yellow-600">-- ms</p>
                 </div>
                 <div class="bg-purple-50 p-4 rounded-lg">
@@ -165,11 +194,18 @@
                 this.cameraStartTime = 0;
                 this.scanStartTime = 0;
                 this.availableCameras = [];
-                this.currentQuaggaInstance = null;
+                this.scanDetectedHandler = null;
                 
+                this.checkHttps();
                 this.initializeElements();
                 this.attachEventListeners();
                 this.enumerateCameras();
+            }
+            
+            checkHttps() {
+                if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+                    document.getElementById('httpsWarning').classList.remove('hidden');
+                }
             }
             
             initializeElements() {
@@ -201,15 +237,15 @@
             
             async enumerateCameras() {
                 try {
+                    // カメラアクセス許可を取得
+                    await navigator.mediaDevices.getUserMedia({ video: true }).then(stream => {
+                        stream.getTracks().forEach(track => track.stop());
+                    });
+                    
                     const devices = await navigator.mediaDevices.enumerateDevices();
                     this.availableCameras = devices.filter(device => device.kind === 'videoinput');
                     
-                    this.cameraSelect.innerHTML = '';
-                    
-                    if (this.availableCameras.length === 0) {
-                        this.cameraSelect.innerHTML = '<option value="">カメラが見つかりません</option>';
-                        return;
-                    }
+                    this.cameraSelect.innerHTML = '<option value="">デフォルト</option>';
                     
                     this.availableCameras.forEach((camera, index) => {
                         const option = document.createElement('option');
@@ -220,7 +256,7 @@
                     
                 } catch (error) {
                     console.error('カメラの列挙に失敗:', error);
-                    this.cameraSelect.innerHTML = '<option value="">カメラの検出に失敗</option>';
+                    this.cameraSelect.innerHTML = '<option value="">カメラアクセスが拒否されました</option>';
                 }
             }
             
@@ -249,25 +285,32 @@
                 this.cameraStartTime = startTime;
                 
                 try {
-                    const resolution = this.getResolution();
-                    const QuaggaLib = this.getQuaggaInstance();
-                    this.currentQuaggaInstance = QuaggaLib;
-                    
                     // 既存のスキャナーを停止
                     if (this.isScanning) {
                         this.stopCamera();
-                        await new Promise(resolve => setTimeout(resolve, 100));
+                        await new Promise(resolve => setTimeout(resolve, 500));
+                    }
+                    
+                    const resolution = this.getResolution();
+                    const QuaggaLib = this.getQuaggaInstance();
+                    
+                    // プレースホルダーを隠す
+                    const placeholder = document.getElementById('placeholder');
+                    if (placeholder) {
+                        placeholder.style.display = 'none';
                     }
                     
                     const constraints = {
-                        width: { min: resolution.width, ideal: resolution.width },
-                        height: { min: resolution.height, ideal: resolution.height },
-                        facingMode: "environment"
+                        width: { min: resolution.width },
+                        height: { min: resolution.height },
+                        facingMode: "environment",
+                        aspectRatio: { min: 1, max: 2 }
                     };
                     
                     // カメラが選択されている場合はdeviceIdを追加
                     if (this.cameraSelect.value) {
                         constraints.deviceId = { exact: this.cameraSelect.value };
+                        delete constraints.facingMode; // deviceIdが指定されている場合はfacingModeを削除
                     }
                     
                     const config = {
@@ -275,23 +318,11 @@
                             name: "Live",
                             type: "LiveStream",
                             target: document.querySelector('#interactive'),
-                            constraints: constraints,
-                            area: {
-                                top: "0%",
-                                right: "0%",
-                                left: "0%",
-                                bottom: "0%"
-                            }
+                            constraints: constraints
                         },
-                        locator: {
-                            patchSize: "medium",
-                            halfSample: true
-                        },
-                        numOfWorkers: navigator.hardwareConcurrency ? Math.min(navigator.hardwareConcurrency, 4) : 2,
                         decoder: {
                             readers: [this.barcodeType.value + "_reader"]
-                        },
-                        locate: true
+                        }
                     };
                     
                     await new Promise((resolve, reject) => {
@@ -302,14 +333,20 @@
                                 return;
                             }
                             
-                            const endTime = performance.now();
-                            const cameraTime = Math.round(endTime - startTime);
-                            this.cameraStartTimeEl.textContent = cameraTime + ' ms';
-                            
-                            QuaggaLib.start();
-                            this.isScanning = true;
-                            this.updateButtonStates();
-                            resolve();
+                            try {
+                                QuaggaLib.start();
+                                
+                                const endTime = performance.now();
+                                const cameraTime = Math.round(endTime - startTime);
+                                this.cameraStartTimeEl.textContent = cameraTime + ' ms';
+                                
+                                this.isScanning = true;
+                                this.updateButtonStates();
+                                resolve();
+                            } catch (startError) {
+                                console.error('Quagga開始エラー:', startError);
+                                reject(startError);
+                            }
                         });
                     });
                     
@@ -318,29 +355,44 @@
                     alert('カメラの開始に失敗しました: ' + error.message);
                     this.isScanning = false;
                     this.updateButtonStates();
+                    
+                    // プレースホルダーを再表示
+                    const placeholder = document.getElementById('placeholder');
+                    if (placeholder) {
+                        placeholder.style.display = 'flex';
+                    }
                 }
             }
             
             stopCamera() {
                 try {
-                    if (this.currentQuaggaInstance && this.isScanning) {
-                        this.currentQuaggaInstance.stop();
+                    const QuaggaLib = this.getQuaggaInstance();
+                    
+                    if (this.isScanning) {
+                        // 検出イベントハンドラーをクリア
+                        if (this.scanDetectedHandler) {
+                            QuaggaLib.offDetected(this.scanDetectedHandler);
+                            this.scanDetectedHandler = null;
+                        }
+                        
+                        QuaggaLib.stop();
                     }
                 } catch (error) {
                     console.error('カメラ停止エラー:', error);
                 } finally {
                     this.isScanning = false;
-                    this.currentQuaggaInstance = null;
                     this.updateButtonStates();
                     
-                    // プレビューをクリア
-                    document.querySelector('#interactive').innerHTML = 
-                        '<div class="flex items-center justify-center h-full text-gray-500">カメラを開始してください</div>';
+                    // プレースホルダーを再表示
+                    const placeholder = document.getElementById('placeholder');
+                    if (placeholder) {
+                        placeholder.style.display = 'flex';
+                    }
                 }
             }
             
             async performScan() {
-                if (!this.isScanning || !this.currentQuaggaInstance) {
+                if (!this.isScanning) {
                     alert('最初にカメラを開始してください');
                     return;
                 }
@@ -349,13 +401,15 @@
                 this.scanTimeEl.textContent = '測定中...';
                 
                 try {
-                    const QuaggaLib = this.currentQuaggaInstance;
+                    const QuaggaLib = this.getQuaggaInstance();
                     
                     // 既存のリスナーをクリア
-                    QuaggaLib.offDetected();
+                    if (this.scanDetectedHandler) {
+                        QuaggaLib.offDetected(this.scanDetectedHandler);
+                    }
                     
                     // 一回限りの検出イベントリスナーを設定
-                    const detectHandler = (result) => {
+                    this.scanDetectedHandler = (result) => {
                         const endTime = performance.now();
                         const scanTime = Math.round(endTime - this.scanStartTime);
                         const cameraTime = Math.round(this.scanStartTime - this.cameraStartTime);
@@ -368,16 +422,20 @@
                         this.saveMeasurement(cameraTime, scanTime, result.codeResult.code);
                         
                         // イベントリスナーを削除
-                        QuaggaLib.offDetected(detectHandler);
+                        QuaggaLib.offDetected(this.scanDetectedHandler);
+                        this.scanDetectedHandler = null;
                     };
                     
-                    QuaggaLib.onDetected(detectHandler);
+                    QuaggaLib.onDetected(this.scanDetectedHandler);
                     
                     // 30秒でタイムアウト
                     setTimeout(() => {
-                        QuaggaLib.offDetected(detectHandler);
                         if (this.scanTimeEl.textContent === '測定中...') {
                             this.scanTimeEl.textContent = 'タイムアウト';
+                            if (this.scanDetectedHandler) {
+                                QuaggaLib.offDetected(this.scanDetectedHandler);
+                                this.scanDetectedHandler = null;
+                            }
                         }
                     }, 30000);
                     
@@ -454,7 +512,7 @@
                 
                 this.resultsTableBody.innerHTML = `
                     <tr>
-                        <td colspan="7" class="border border-gray-300 px-4 py-8 text-center text-gray-500">
+                        <td colspan="7" class="border border-gray-300 px-4 py-2 text-center text-gray-500">
                             まだ測定結果がありません
                         </td>
                     </tr>
