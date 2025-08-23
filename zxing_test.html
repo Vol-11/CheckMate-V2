@@ -5,12 +5,11 @@
   <title>Barcode Scanner Benchmark - ZXing専用</title>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <style>
-    html,body{background:#171b26;color:#f3f3f3;}
-    body{font-family:system-ui,sans-serif;margin:16px;}
-    h1{font-size:20px;margin:0 0 12px;color:#26caf9;}
+    body{font-family:system-ui,sans-serif;background:#171b26;color:#f3f3f3;margin:16px;}
+    h1{font-size:20px;margin-bottom:16px;color:#26caf9;}
     .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:9px;}
     label{display:inline-flex;align-items:center;gap:6px;}
-    select,button{font:inherit;padding:6px 8px;border-radius:4px;border:1px solid #345;}
+    select,button{font:inherit;padding:6px 8px;border-radius:4px;border:1px solid #345;background:#283040;color:#fff;}
     button{cursor:pointer;background:#1b5cff;color:#fff;}
     button:hover{background:#1456bf;}
     button:disabled{background:#525f77;cursor:not-allowed;}
@@ -21,6 +20,7 @@
     .pill{padding:2px 8px;background:#31c7ba;color:#fff;border-radius:12px;font-weight:700;}
     @media (prefers-color-scheme: light){
      body{background:#f6fbff;color:#224;}
+     h1{color:#1975d2;}
      #status{background:#e5f4f7;color:#212;}
      #log{background:#e2f2ff;color:#026;}
      .note{color:#4d6a75;}
@@ -31,7 +31,9 @@
 <body>
   <h1>📱 Barcode Scanner Benchmark（ZXing専用）</h1>
   <div class="row">
-    <label>カメラ:<select id="device"></select></label>
+    <label>カメラ:
+      <select id="device"></select>
+    </label>
     <label>解像度:
       <select id="preset">
         <option value="480p">854x480 (高速)</option>
@@ -55,118 +57,122 @@
     📖 教科書ISBN（EAN-13, 978/979から始まる13桁バーコード）
   </div>
   <div id="log"></div>
-<script src="https://cdn.jsdelivr.net/npm/@zxing/library@latest"></script>
-<script>
-const $ = s=>document.querySelector(s);
-const video=$("#video"),logView=$("#log"),statusView=$("#status");
-let zxingReader=null,scanning=false,currentStream=null;
-let t0=0,t1=0,s0=0,s1=0;
-const results=[];
-function log(...a){logView.textContent+=`[${new Date().toLocaleTimeString()}] `+a.join(" ")+"\n";logView.scrollTop=logView.scrollHeight;}
-function setStatus(msg,type="ok"){
-  statusView.textContent=msg;
-  if(type==="ok")statusView.style.background="#20294D",statusView.style.color="#fff";
-  if(type==="warn")statusView.style.background="#ffe29b",statusView.style.color="#1c1200";
-  if(type==="error")statusView.style.background="#b22222",statusView.style.color="#fff";
-}
-function updateButtons(state){
-  $("#btnInit").disabled=(state==="scanning");
-  $("#btnStart").disabled=!(state==="ready");
-  $("#btnStop").disabled=!(state==="scanning");
-  $("#btnTeardown").disabled=!(state==="ready"||state==="scanning");
-  $("#btnExport").disabled=results.length===0;
-}
-async function updateDeviceList(){
-  try{
-    const temp=await navigator.mediaDevices.getUserMedia({video:true});
-    temp.getTracks().forEach(t=>t.stop());
-    const devs=await navigator.mediaDevices.enumerateDevices();
-    const cams=devs.filter(d=>d.kind==="videoinput");
-    const sel=$("#device");sel.innerHTML="";
-    cams.forEach(cam=>{
-      const opt=document.createElement("option");
-      opt.value=cam.deviceId;
-      opt.textContent=cam.label||`カメラ${cam.deviceId.slice(0,8)}`;
-      sel.appendChild(opt);
-    });
-  }catch(e){log("⚠️ カメラ権限がありません:",e.message);}
-}
-function getMediaConstraints(){
-  const deviceId=$("#device").value,preset=$("#preset").value;
-  const sizes={ "480p":{width:854,height:480}, "540p":{width:960,height:540}, "720p":{width:1280,height:720} };
-  const sz=sizes[preset]||sizes["720p"];
-  return{audio:false,video:{...(deviceId?{deviceId:{exact:deviceId}}:{facingMode:"environment"}),
-  width:{ideal:sz.width},height:{ideal:sz.height},frameRate:{ideal:30}}};
-}
-function recordMeasurement(data){
-  results.push({
-    timestamp:new Date().toISOString(),
-    device:$("#device").selectedOptions[0]?.textContent||"unknown",
-    preset:$("#preset").value,...data
-  });
-  updateButtons(scanning?"scanning":zxingReader?"ready":"idle");
-}
-function exportResults(){
-  if(results.length===0)return;
-  const hd=["timestamp","device","preset","init_time_ms","scan_time_ms","detected_text","format"];
-  const csv=[hd.join(","),...results.map(r=>[r.timestamp,`"${r.device}"`,r.preset,
-    r.init_time_ms||"",r.scan_time_ms||"",`"${r.detected_text||""}"`,r.format||""].join(","))].join("\n");
-  const blob=new Blob([csv],{type:"text/csv"});
-  const url=URL.createObjectURL(blob),a=document.createElement("a");
-  a.href=url;a.download=`barcode_benchmark_${new Date().toISOString().replace(/:/g,"-").slice(0,19)}.csv`;
-  a.click();URL.revokeObjectURL(url);log("📄結果をCSVでダウンロード");
-}
-async function initZXing(){
-  if(typeof window.ZXing==="undefined")throw new Error("ZXingライブラリがロードされていません");
-  t0=performance.now();
-  const cs=getMediaConstraints();
-  currentStream=await navigator.mediaDevices.getUserMedia(cs);
-  video.srcObject=currentStream;await video.play();
-  const ZX=window.ZXing||ZXing;
-  const hints=new Map();
-  hints.set(ZX.DecodeHintType.POSSIBLE_FORMATS,[ZX.BarcodeFormat.EAN_13]);
-  hints.set(ZX.DecodeHintType.TRY_HARDER,false);
-  zxingReader=new ZX.BrowserMultiFormatReader(hints);
-  t1=performance.now();
-  log(`✅ ZXing初期化(${(t1-t0).toFixed(1)}ms)`);
-  setStatus("カメラ準備完了","ok");updateButtons("ready");
-  recordMeasurement({init_time_ms:(t1-t0).toFixed(1)});
-}
-async function startZXingScan(){
-  if(!zxingReader)return;
-  scanning=true;updateButtons("scanning");
-  s0=performance.now();
-  zxingReader.decodeFromVideoElementContinuously(video,(result,err)=>{
-    if(result&&scanning){
-      s1=performance.now();
-      const text=result.getText(),format=result.getBarcodeFormat();
-      log(`🎯検出:${text} (${format})`);
-      setStatus(`検出完了:${text}`,"ok");
-      recordMeasurement({scan_time_ms:(s1-s0).toFixed(1),detected_text:text,format});
-      stopZXingScan();
+  <!-- 必ず「browser」エントリポイントを使う。index.jsは禁止 -->
+  <script src="https://cdn.jsdelivr.net/npm/@zxing/browser@0.5.13/umd/index.min.js"></script>
+  <script>
+    // ======== ZXing専用ベンチマーク ========
+    const $ = (s) => document.querySelector(s);
+    const video = $("#video");
+    const logView = $("#log");
+    const statusView = $("#status");
+    let zxingReader = null, scanning = false, currentStream = null;
+    let t0=0, t1=0, s0=0, s1=0;
+    const results=[];
+    function log(...a){logView.textContent+=`[${new Date().toLocaleTimeString()}] `+a.join(" ")+'\n';logView.scrollTop=logView.scrollHeight;}
+    function setStatus(msg,type="ok"){
+      statusView.textContent=msg;
+      if(type=="ok")statusView.style.background="#20294D",statusView.style.color="#fff";
+      if(type=="warn")statusView.style.background="#ffe29b",statusView.style.color="#1c1200";
+      if(type=="error")statusView.style.background="#b22222",statusView.style.color="#fff";
     }
-  });setStatus("スキャン中...バーコードをカメラに向けてください","warn");
-}
-async function stopZXingScan(){
-  if(zxingReader)zxingReader.reset();
-  scanning=false;setStatus("停止しました","ok");updateButtons("ready");
-}
-async function cleanupZXing(){
-  await stopZXingScan();
-  if(zxingReader)zxingReader=null;
-  if(currentStream){currentStream.getTracks().forEach(t=>t.stop());currentStream=null;}
-  video.srcObject=null;setStatus("解放完了","ok");updateButtons("idle");
-}
-$("#btnInit").onclick=async()=>{try{await cleanupZXing();log("カメラ初期化開始");await initZXing();}catch(e){log("❌初期化エラー:",e.message);setStatus("初期化失敗","error");}};
-$("#btnStart").onclick=async()=>{try{await startZXingScan();}catch(e){log("❌認識エラー:",e.message);setStatus("認識失敗","error");}};
-$("#btnStop").onclick=async()=>{await stopZXingScan();};
-$("#btnTeardown").onclick=async()=>{await cleanupZXing();};
-$("#btnExport").onclick=exportResults;
-window.addEventListener('load',async()=>{
-  try{await updateDeviceList();setStatus("カメラリストOK - 起動できます","ok");
-  log("準備完了: カメラ選択→起動→認識開始");updateButtons("idle");}
-  catch(e){log("❌ 起動エラー:",e.message);setStatus("起動エラー","error");}
-});
-</script>
+    function updateButtons(state){
+      $("#btnInit").disabled=(state==="scanning");
+      $("#btnStart").disabled=!(state==="ready");
+      $("#btnStop").disabled=!(state==="scanning");
+      $("#btnTeardown").disabled=!(state==="ready"||state==="scanning");
+      $("#btnExport").disabled=results.length===0;
+    }
+    async function updateDeviceList(){
+      try{
+        const temp=await navigator.mediaDevices.getUserMedia({video:true});
+        temp.getTracks().forEach(t=>t.stop());
+        const devs=await navigator.mediaDevices.enumerateDevices();
+        const cams=devs.filter(d=>d.kind==="videoinput");
+        const sel=$("#device");sel.innerHTML="";
+        cams.forEach(cam=>{
+          const opt=document.createElement("option");
+          opt.value=cam.deviceId;
+          opt.textContent=cam.label||`カメラ${cam.deviceId.slice(0,8)}`;
+          sel.appendChild(opt);
+        });
+      }catch(e){log("⚠️ カメラ権限がありません:",e.message);}
+    }
+    function getMediaConstraints(){
+      const deviceId=$("#device").value,preset=$("#preset").value;
+      const sizes={ "480p":{width:854,height:480}, "540p":{width:960,height:540}, "720p":{width:1280,height:720} };
+      const sz=sizes[preset]||sizes["720p"];
+      return{audio:false,video:{...(deviceId?{deviceId:{exact:deviceId}}:{facingMode:"environment"}),
+      width:{ideal:sz.width},height:{ideal:sz.height},frameRate:{ideal:30}}};
+    }
+    function recordMeasurement(data){
+      results.push({
+        timestamp:new Date().toISOString(),
+        device:$("#device").selectedOptions[0]?.textContent||"unknown",
+        preset:$("#preset").value,...data
+      });
+      updateButtons(scanning?"scanning":zxingReader?"ready":"idle");
+    }
+    function exportResults(){
+      if(results.length===0)return;
+      const hd=["timestamp","device","preset","init_time_ms","scan_time_ms","detected_text","format"];
+      const csv=[hd.join(","),...results.map(r=>[r.timestamp,`"${r.device}"`,r.preset,
+        r.init_time_ms||"",r.scan_time_ms||"",`"${r.detected_text||""}"`,r.format||""].join(","))].join("\n");
+      const blob=new Blob([csv],{type:"text/csv"});
+      const url=URL.createObjectURL(blob),a=document.createElement("a");
+      a.href=url;a.download=`barcode_benchmark_${new Date().toISOString().replace(/:/g,"-").slice(0,19)}.csv`;
+      a.click();URL.revokeObjectURL(url);log("📄結果をCSVでダウンロード");
+    }
+    async function initZXing(){
+      if(!window.ZXingBrowser) throw new Error("ZXing browser版がロードされていません");
+      t0=performance.now();
+      const cs=getMediaConstraints();
+      currentStream=await navigator.mediaDevices.getUserMedia(cs);
+      video.srcObject=currentStream;await video.play();
+      const ZX=window.ZXingBrowser;
+      const hints=new Map();
+      hints.set(ZX.DecodeHintType.POSSIBLE_FORMATS,[ZX.BarcodeFormat.EAN_13]);
+      hints.set(ZX.DecodeHintType.TRY_HARDER,false);
+      zxingReader=new ZX.BrowserMultiFormatReader(hints);
+      t1=performance.now();
+      log(`✅ ZXing初期化(${(t1-t0).toFixed(1)}ms)`);
+      setStatus("カメラ準備完了","ok");updateButtons("ready");
+      recordMeasurement({init_time_ms:(t1-t0).toFixed(1)});
+    }
+    async function startZXingScan(){
+      if(!zxingReader)return;
+      scanning=true;updateButtons("scanning");
+      s0=performance.now();
+      zxingReader.decodeFromVideoElementContinuously(video,(result,err)=>{
+        if(result&&scanning){
+          s1=performance.now();
+          const text=result.getText(),format=result.getBarcodeFormat();
+          log(`🎯検出:${text} (${format})`);
+          setStatus(`検出完了:${text}`,"ok");
+          recordMeasurement({scan_time_ms:(s1-s0).toFixed(1),detected_text:text,format});
+          stopZXingScan();
+        }
+      });setStatus("スキャン中...バーコードをカメラに向けてください","warn");
+    }
+    async function stopZXingScan(){
+      if(zxingReader)zxingReader.reset();
+      scanning=false;setStatus("停止しました","ok");updateButtons("ready");
+    }
+    async function cleanupZXing(){
+      await stopZXingScan();
+      if(zxingReader)zxingReader=null;
+      if(currentStream){currentStream.getTracks().forEach(t=>t.stop());currentStream=null;}
+      video.srcObject=null;setStatus("解放完了","ok");updateButtons("idle");
+    }
+    $("#btnInit").onclick=async()=>{try{await cleanupZXing();log("カメラ初期化開始");await initZXing();}catch(e){log("❌初期化エラー:",e.message);setStatus("初期化失敗","error");}};
+    $("#btnStart").onclick=async()=>{try{await startZXingScan();}catch(e){log("❌認識エラー:",e.message);setStatus("認識失敗","error");}};
+    $("#btnStop").onclick=async()=>{await stopZXingScan();};
+    $("#btnTeardown").onclick=async()=>{await cleanupZXing();};
+    $("#btnExport").onclick=exportResults;
+    window.addEventListener('load',async()=>{
+      try{await updateDeviceList();setStatus("カメラリストOK - 起動できます","ok");
+      log("準備完了: カメラ選択→起動→認識開始");updateButtons("idle");}
+      catch(e){log("❌ 起動エラー:",e.message);setStatus("起動エラー","error");}
+    });
+  </script>
 </body>
 </html>
