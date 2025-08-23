@@ -5,9 +5,7 @@
   <title>Barcode Scanner Benchmark (Quagga / Quagga2 / ZXing)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
-    :root {
-      color-scheme: light dark;
-    }
+    :root { color-scheme: light dark; }
     body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Noto Sans JP, sans-serif; margin: 16px; }
     h1 { font-size: 20px; margin: 0 0 12px; }
     .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin-bottom: 8px; }
@@ -15,17 +13,17 @@
     select, button { font: inherit; padding: 6px 8px; }
     button { cursor: pointer; }
     #video { width: min(480px, 90vw); aspect-ratio: 3 / 2; background: #000; border-radius: 8px; display: block; }
+    #overlay { position: relative; width: min(480px, 90vw); height: calc((min(480px, 90vw)) * 2 / 3); margin-top: 8px; }
     #log { margin-top: 8px; padding: 8px; border: 1px solid #8884; border-radius: 8px; white-space: pre-wrap; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; min-height: 100px; }
     .note { font-size: 12px; color: #888; }
     .pill { padding: 2px 6px; border-radius: 999px; background: #8882; font-size: 11px; }
     .grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
-    @media (min-width: 980px) {
-      .grid { grid-template-columns: 520px 1fr; align-items: start; }
-    }
+    @media (min-width: 980px) { .grid { grid-template-columns: 520px 1fr; align-items: start; } }
     .kbd { font-family: ui-monospace, monospace; background: #8882; padding: 1px 5px; border-radius: 4px; }
     .warn { color: #b35300; }
     .ok { color: #0a7a3c; }
     .err { color: #b00020; }
+    canvas.debug { position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; }
   </style>
 </head>
 <body>
@@ -70,7 +68,12 @@
 
   <div class="grid">
     <div>
-      <video id="video" playsinline muted></video>
+      <div id="overlay">
+        <video id="video" playsinline muted></video>
+        <!-- Quagga/Quagga2 の処理中に内部で生成される canvas が undefined の data を読みに行くことがあるため、
+             明示的にデバッグキャンバスを配置し、描画先を固定する -->
+        <canvas id="debugCanvas" class="debug"></canvas>
+      </div>
       <div id="log"></div>
       <div class="note">
         トラブルシュート:
@@ -85,37 +88,43 @@
       <h3 style="margin:8px 0">このページの目的と設計</h3>
       <p>
         1つのHTML内で Quagga / Quagga2 / ZXing を切替え、(1)カメラ初期化の起動時間 と (2)「認識開始」→最初の検出までの時間 を比較計測します。
-        グローバル衝突による <span class="kbd">TypeError: Ut[e] is not a constructor</span> を回避するため、各ライブラリを固定バージョンで読み込み、直後に退避し、グローバル名を消去して安全に切替できるようにしています。
+        以前発生した <span class="kbd">TypeError: Ut[e] is not a constructor</span> と今回の
+        <span class="kbd">TypeError: Cannot read properties of undefined (reading 'data')</span> を回避するため、ライブラリの衝突防止・初期化順序・
+        Quaggaのデバッグ描画ハンドラを適正化しています。
       </p>
-      <h4 style="margin:8px 0">エラー修正の要点</h4>
+      <h4 style="margin:8px 0">今回のエラーの原因と対策</h4>
       <ul>
-        <li>Quagga と Quagga2 は同じグローバル名 <span class="kbd">Quagga</span> を用いるビルドがあるため、読み込み直後に別名へ退避して衝突を回避。</li>
-        <li>固定バージョン（Quagga 0.12.1 / Quagga2 1.7.2 / ZXing 0.20.0）を使用してミニファイ差異の影響を排除。</li>
-        <li>アダプタは退避した参照（<span class="kbd">__Quagga_v0121__</span> / <span class="kbd">__Quagga2_v172__</span>）のみを使用。</li>
+        <li>原因の多くは Quagga の <span class="kbd">onProcessed</span> デバッグ描画で <span class="kbd">res.boxes</span> 等が未定義のフレームに対して
+            <span class="kbd">ctx.putImageData</span> 相当の処理が走ること、もしくは <span class="kbd">inputStream</span> の設定不整合で内部 canvas が未生成のままアクセスされること。</li>
+        <li>対策:
+          <ul>
+            <li>onProcessed のガード強化（res と res.boxes 等を厳密チェック）。</li>
+            <li>inputStream.target に実在する要素（video）を指定し、<b>クラス名</b>や <b>constaints</b> を正しく付与。</li>
+            <li>デバッグ用 canvas を明示的に配置（debugCanvas）し、描画先を固定して undefined を回避。</li>
+            <li>start 前に <span class="kbd">stop()</span> を呼び、ハンドラ多重と内部状態不整合を防止。</li>
+          </ul>
+        </li>
       </ul>
       <h4 style="margin:8px 0">ZXing 高速化の要点</h4>
       <ul>
-        <li>DecodeHintType.POSSIBLE_FORMATS = [ EAN_13 ] に限定。</li>
+        <li>DecodeHintType.POSSIBLE_FORMATS を EAN_13 のみに限定。</li>
         <li>解像度を 720p などに制限して総ピクセル数を抑制。</li>
         <li>最初のヒットで停止（連続処理を避ける）。</li>
       </ul>
     </div>
   </div>
 
-  <!-- ライブラリを固定バージョンで読み込みし、直後に退避して衝突回避 -->
+  <!-- 固定バージョンで読み込みし、直後に退避して衝突回避 -->
   <!-- Quagga (serratus/quaggaJS) -->
   <script src="https://unpkg.com/quagga@0.12.1/dist/quagga.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
   <script>
-    // 退避: Quagga v0.12.1 を __Quagga_v0121__ に保存
     window.__Quagga_v0121__ = window.Quagga;
   </script>
 
   <!-- Quagga2 (@ericblade/quagga2) -->
   <script src="https://unpkg.com/@ericblade/quagga2@1.7.2/dist/quagga.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
   <script>
-    // 退避: Quagga2 のグローバル（Quagga）を __Quagga2_v172__ に保存
     window.__Quagga2_v172__ = window.Quagga;
-    // 衝突防止: グローバル Quagga を消して、以降は退避名のみ参照
     try { delete window.Quagga; } catch (e) { window.Quagga = undefined; }
   </script>
 
@@ -126,6 +135,7 @@
     // ユーティリティ
     const $ = (s)=>document.querySelector(s);
     const video = $("#video");
+    const debugCanvas = $("#debugCanvas");
     const selLib = $("#lib");
     const selDev = $("#device");
     const selPreset = $("#preset");
@@ -141,7 +151,6 @@
       logView.scrollTop = logView.scrollHeight;
       console.log("[LOG]", ...a);
     };
-
     const warn = (...a)=>log("⚠️", ...a);
     const ok = (...a)=>log("✅", ...a);
     const err = (...a)=>log("❌", ...a);
@@ -153,29 +162,15 @@
     const results = []; // { ts, lib, deviceLabel, preset, init_ms, detect_ms, text, format }
 
     function recordResult(meta) {
-      results.push({
-        ts: new Date().toISOString(),
-        ...meta
-      });
+      results.push({ ts: new Date().toISOString(), ...meta });
     }
 
     function exportCSV() {
-      if (!results.length) {
-        warn("出力可能な結果がありません。少なくとも1回スキャンしてください。");
-        return;
-      }
-      const header = [
-        "timestamp","library","device","preset","init_ms","detect_ms","text","format"
-      ];
+      if (!results.length) { warn("出力可能な結果がありません。少なくとも1回スキャンしてください。"); return; }
+      const header = ["timestamp","library","device","preset","init_ms","detect_ms","text","format"];
       const rows = results.map(r => ([
-        r.ts,
-        r.lib,
-        r.deviceLabel ?? "",
-        r.preset ?? "",
-        r.init_ms ?? "",
-        r.detect_ms ?? "",
-        r.text ?? "",
-        r.format ?? ""
+        r.ts, r.lib, r.deviceLabel ?? "", r.preset ?? "",
+        r.init_ms ?? "", r.detect_ms ?? "", r.text ?? "", r.format ?? ""
       ].map(v => {
         const s = (v == null) ? "" : String(v);
         return /[",\n]/.test(s) ? `"${s.replace(/"/g,'""')}"` : s;
@@ -216,28 +211,74 @@
         "1080p": { width: 1920, height: 1080 },
       };
       const wh = sizeMap[preset] || sizeMap["720p"];
-      const baseVideo = deviceId
-        ? { deviceId: { exact: deviceId } }
-        : { facingMode: "environment" };
-      // 既存の baseVideo を壊さないようにオブジェクト合成
+      const baseVideo = deviceId ? { deviceId: { exact: deviceId } } : { facingMode: "environment" };
       const videoConstraint = Object.assign({}, baseVideo, {
         width: { ideal: wh.width },
         height: { ideal: wh.height },
         frameRate: { ideal: 30 }
       });
-      return {
-        audio: false,
-        video: videoConstraint
-      };
+      return { audio: false, video: videoConstraint };
     }
 
-    // アダプタ（各ライブラリを同じ操作系に正規化）
+    // Quagga の onProcessed 用デバッグ描画（undefined ガード付）
+    function attachQuaggaDebugHandlers(Q, videoEl, canvasEl) {
+      try {
+        if (!Q || typeof Q.onProcessed !== "function") return;
+        const ctx = canvasEl.getContext("2d");
+        Q.onProcessed(function(result) {
+          // 結果が無い・途中フレームの場合は何もしない
+          if (!result || !ctx) return;
+          // キャンバスのサイズを video に合わせる
+          const rect = videoEl.getBoundingClientRect();
+          const w = Math.max(1, Math.floor(rect.width));
+          const h = Math.max(1, Math.floor(rect.height));
+          if (canvasEl.width !== w) canvasEl.width = w;
+          if (canvasEl.height !== h) canvasEl.height = h;
+          ctx.clearRect(0, 0, w, h);
+
+          // boxes（候補領域）があれば描画
+          if (Array.isArray(result.boxes)) {
+            ctx.strokeStyle = "rgba(0,255,0,0.6)";
+            ctx.lineWidth = 2;
+            result.boxes.forEach(box => {
+              if (!Array.isArray(box)) return;
+              ctx.beginPath();
+              box.forEach((p, i) => {
+                if (!p || typeof p.x !== "number" || typeof p.y !== "number") return;
+                if (i === 0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y);
+              });
+              ctx.closePath();
+              ctx.stroke();
+            });
+          }
+
+          // line（バーコード中心ライン）があれば描画
+          if (result.line && result.line && result.line[0] && result.line[1]) {
+            const a = result.line[0], b = result.line[1];
+            if (a && b && typeof a.x === "number" && typeof a.y === "number" && typeof b.x === "number" && typeof b.y === "number") {
+              ctx.strokeStyle = "rgba(255,0,0,0.8)";
+              ctx.lineWidth = 3;
+              ctx.beginPath();
+              ctx.moveTo(a.x, a.y);
+              ctx.lineTo(b.x, b.y);
+              ctx.stroke();
+            }
+          }
+        });
+      } catch (e) {
+        // デバッグ描画が失敗しても本体処理には影響しないようにする
+        warn("Quaggaデバッグ描画の設定で例外が発生しましたが無視します。", e);
+      }
+    }
+
+    // アダプタ
     const Adapters = {
       quagga: {
         Q: window.__Quagga_v0121__,
+        _detectedHandler: null,
         async init(videoEl, constraints) {
           t0 = performance.now();
-          // 先にユーザメディアを確保してプレビューに載せる（プレビューとQuaggaのLiveStreamを一致させる）
+          // 先にユーザメディアを確保してプレビューに載せる
           stream = await navigator.mediaDevices.getUserMedia(constraints);
           videoEl.srcObject = stream;
           await videoEl.play();
@@ -248,30 +289,45 @@
                 inputStream: {
                   name: "Live",
                   type: "LiveStream",
+                  // target は video 要素を指定
                   target: videoEl,
                   constraints: constraints.video
                 },
-                // EAN のみに絞る（高速化・誤検出抑制）
-                decoder: { readers: ["ean_reader"] },
-                locate: true
+                locator: { patchSize: "medium", halfSample: true }, // 安定化
+                decoder: { readers: ["ean_reader"] }, // EAN のみに絞る
+                locate: true,
+                numOfWorkers: (typeof navigator !== "undefined" && navigator.hardwareConcurrency) ? Math.max(1, Math.min(4, navigator.hardwareConcurrency - 1)) : 2
               }, (err) => err ? rej(err) : res());
-            } catch (e) {
-              rej(e);
-            }
+            } catch (e) { rej(e); }
           });
+
+          // デバッグ描画（undefinedガード付き）
+          attachQuaggaDebugHandlers(this.Q, videoEl, debugCanvas);
+
           t1 = performance.now();
         },
         async startScan(onResult) {
-          // quagga 0.12系は offDetected が存在しないビルドがあるため、開始前に stop を呼びハンドラ多重を避ける
+          // 多重開始防止：開始前に安全に stop
           try { this.Q.stop(); } catch {}
+          // 過去のハンドラを明示的に解除（onDetected多重対策）
+          if (this._detectedHandler && typeof this.Q.offDetected === "function") {
+            try { this.Q.offDetected(this._detectedHandler); } catch {}
+          }
           s0 = performance.now();
-          this.Q.onDetected((res) => {
-            if (!res || !res.codeResult) return;
+
+          this._detectedHandler = (res) => {
+            if (!res || !res.codeResult || !res.codeResult.code) return;
             s1 = performance.now();
             onResult({ text: res.codeResult.code, format: res.codeResult.format });
-            // 今回は最初のヒットで停止（ベンチのため）
             try { this.Q.stop(); } catch {}
-          });
+          };
+
+          // Quagga 0.12 系には offDetected がない場合があるので、あれば使用
+          if (typeof this.Q.onDetected === "function") {
+            this.Q.onDetected(this._detectedHandler);
+          }
+
+          // 認識開始
           this.Q.start();
         },
         async stopScan() {
@@ -279,48 +335,73 @@
         },
         async teardown() {
           try { this.Q.stop(); } catch {}
+          if (typeof this.Q.offProcessed === "function") {
+            try { this.Q.offProcessed(); } catch {}
+          }
+          if (typeof this.Q.offDetected === "function" && this._detectedHandler) {
+            try { this.Q.offDetected(this._detectedHandler); } catch {}
+          }
+          this._detectedHandler = null;
           if (stream) {
             stream.getTracks().forEach(t => t.stop());
             stream = null;
           }
           video.srcObject = null;
+          // デバッグキャンバスをクリア
+          const ctx = debugCanvas.getContext("2d");
+          if (ctx) ctx.clearRect(0, 0, debugCanvas.width, debugCanvas.height);
         }
       },
       quagga2: {
         Q2: window.__Quagga2_v172__,
+        _detectedHandler: null,
         async init(videoEl, constraints) {
           t0 = performance.now();
           stream = await navigator.mediaDevices.getUserMedia(constraints);
           videoEl.srcObject = stream;
           await videoEl.play();
+
           await new Promise((res, rej) => {
             try {
               this.Q2.init({
                 inputStream: {
                   name: "Live",
                   type: "LiveStream",
-                target: videoEl,
+                  target: videoEl,
                   constraints: constraints.video
                 },
+                locator: { patchSize: "medium", halfSample: true },
                 decoder: { readers: ["ean_reader"] },
-                locate: true
+                locate: true,
+                numOfWorkers: (typeof navigator !== "undefined" && navigator.hardwareConcurrency) ? Math.max(1, Math.min(4, navigator.hardwareConcurrency - 1)) : 2
               }, (err) => err ? rej(err) : res());
-            } catch (e) {
-              rej(e);
-            }
+            } catch (e) { rej(e); }
           });
+
+          attachQuaggaDebugHandlers(this.Q2, videoEl, debugCanvas);
+
           t1 = performance.now();
         },
         async startScan(onResult) {
+          // 安全策：開始前に停止
+          try { this.Q2.stop(); } catch {}
+          // ハンドラ多重解除
+          if (this._detectedHandler && typeof this.Q2.offDetected === "function") {
+            try { this.Q2.offDetected(this._detectedHandler); } catch {}
+          }
           s0 = performance.now();
-          // Quagga2 には offDetected があるビルドが多いが存在しない場合もあるので try
-          try { this.Q2.offDetected && this.Q2.offDetected(); } catch {}
-          this.Q2.onDetected((res) => {
-            if (!res || !res.codeResult) return;
+
+          this._detectedHandler = (res) => {
+            if (!res || !res.codeResult || !res.codeResult.code) return;
             s1 = performance.now();
             onResult({ text: res.codeResult.code, format: res.codeResult.format });
             try { this.Q2.stop(); } catch {}
-          });
+          };
+
+          if (typeof this.Q2.onDetected === "function") {
+            this.Q2.onDetected(this._detectedHandler);
+          }
+
           this.Q2.start();
         },
         async stopScan() {
@@ -328,11 +409,20 @@
         },
         async teardown() {
           try { this.Q2.stop(); } catch {}
+          if (typeof this.Q2.offProcessed === "function") {
+            try { this.Q2.offProcessed(); } catch {}
+          }
+          if (typeof this.Q2.offDetected === "function" && this._detectedHandler) {
+            try { this.Q2.offDetected(this._detectedHandler); } catch {}
+          }
+          this._detectedHandler = null;
           if (stream) {
             stream.getTracks().forEach(t => t.stop());
             stream = null;
           }
           video.srcObject = null;
+          const ctx = debugCanvas.getContext("2d");
+          if (ctx) ctx.clearRect(0, 0, debugCanvas.width, debugCanvas.height);
         }
       },
       zxing: {
@@ -340,11 +430,9 @@
         _running: false,
         async init(videoEl, constraints) {
           t0 = performance.now();
-          // チューニング: 解像度（presetで選択）・30fps ideal
           const tuned = JSON.parse(JSON.stringify(constraints));
           tuned.video = tuned.video || {};
           if (typeof tuned.video === "object") {
-            // すでに deviceId/facingMode が設定済みなら維持しつつサイズ・fps を追加
             if (!('width' in tuned.video)) tuned.video.width = { ideal: 1280 };
             if (!('height' in tuned.video)) tuned.video.height = { ideal: 720 };
             if (!('frameRate' in tuned.video)) tuned.video.frameRate = { ideal: 30 };
@@ -353,10 +441,10 @@
           videoEl.srcObject = stream;
           await videoEl.play();
 
-          // ZXing ヒント: EAN_13 のみに絞る（ISBN 向け）
+          // ZXing: EAN-13 限定
           const hints = new Map();
           hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.EAN_13]);
-          // 高速化のため TRY_HARDER は付与しない（必要に応じて切替）
+          // TRY_HARDER はデフォルト無効（必要なら下行を有効化）
           // hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
 
           this._reader = new ZXing.BrowserMultiFormatReader(hints);
@@ -367,14 +455,10 @@
           this._running = true;
           s0 = performance.now();
           this._reader.decodeFromVideoElementContinuously(video, (result, err) => {
-            // err は NotFound など通常動作の一部なのでログしない
             if (result) {
               const txt = result.getText();
-              // さらに ISBN プレフィックスでフィルタしたい場合（速度への影響は小さいが誤検出防止に有効）
-              // if (!/^97[89]/.test(txt)) return;
               if (!s1) s1 = performance.now();
               onResult({ text: txt, format: result.getBarcodeFormat() });
-              // 最初のヒットで停止
               this._reader.reset();
               this._running = false;
             }
@@ -392,6 +476,8 @@
           }
           video.srcObject = null;
           this._reader = null;
+          const ctx = debugCanvas.getContext("2d");
+          if (ctx) ctx.clearRect(0, 0, debugCanvas.width, debugCanvas.height);
         }
       }
     };
@@ -402,18 +488,18 @@
     }
 
     function printTimes() {
-      if (t0 && t1) {
-        log(`起動時間: ${(t1 - t0).toFixed(1)} ms`);
-      }
-      if (s0 && s1) {
-        log(`認識開始→検出: ${(s1 - s0).toFixed(1)} ms`);
-      }
+      if (t0 && t1) log(`起動時間: ${(t1 - t0).toFixed(1)} ms`);
+      if (s0 && s1) log(`認識開始→検出: ${(s1 - s0).toFixed(1)} ms`);
     }
 
     // イベント
     $("#btnInit").onclick = async () => {
       try {
         if (adapter) await adapter.teardown();
+        // デバッグキャンバス初期化（サイズは video の描画時に合わせる）
+        const ctx = debugCanvas.getContext("2d");
+        if (ctx) ctx.clearRect(0, 0, debugCanvas.width, debugCanvas.height);
+
         adapter = await ensureAdapter();
         const constraints = getConstraints();
         t0 = 0; t1 = 0; s0 = 0; s1 = 0;
@@ -423,7 +509,6 @@
         ok(`[${selLib.value}] カメラ起動完了  device="${devLabel}" preset=${preset}`);
         printTimes();
 
-        // 起動結果も記録（検出時間は未定のため空）
         recordResult({
           lib: selLib.value,
           deviceLabel: devLabel,
@@ -440,10 +525,7 @@
 
     $("#btnStart").onclick = async () => {
       try {
-        if (!adapter) {
-          warn("先に「カメラ起動」を実行してください。");
-          return;
-        }
+        if (!adapter) { warn("先に「カメラ起動」を実行してください。"); return; }
         s0 = 0; s1 = 0;
         const devLabel = selDev.selectedOptions[0]?.textContent || "";
         const preset = selPreset.value;
@@ -489,7 +571,6 @@
     // 初期セットアップ: カメラ一覧（ラベル取得のため初回のみ一時的に権限付与を試みる）
     (async () => {
       try {
-        // ラベルを取得するには一度許可が必要なことがある
         const tmp = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
         tmp.getTracks().forEach(t => t.stop());
       } catch (e) {
@@ -503,26 +584,11 @@
       }
     })();
 
-    // 追加のヒント・解説（コメント）
-    /*
-      — エラー "TypeError: Ut[e] is not a constructor" について —
-      主因は Quagga と Quagga2 が同じグローバル名 Quagga を用いるビルドを同時に読み込んだ場合に
-      片方の内部参照が上書きされ、ミニファイされた内部クラス（Ut など）の解決に失敗する事象です。
-      対策として、本HTMLでは以下を行っています。
-        1) バージョン固定で読み込み（挙動差の吸収）
-        2) 読み込み直後に退避（__Quagga_v0121__ / __Quagga2_v172__）
-        3) グローバル window.Quagga を削除し、以降は退避名のみ参照
-
-      — ZXing 高速化（EAN-13/ISBN に限定） —
-      @zxing/library の BrowserMultiFormatReader は複数フォーマットに対応できますが、
-      DecodeHintType.POSSIBLE_FORMATS に EAN_13 だけを指定することで、探索範囲を狭めて高速化できます。
-      また、TRY_HARDER ヒントは難しいケースの探索を増やしますが、速度低下につながるためデフォルトでは付けません。
-      明るい環境・適切な距離（15〜25cm）・720p 程度の解像度が安定しやすいです。
-
-      — ベンチマーク指針 —
-      ライブラリごとの差が小さい場合、照明・ピント・手ブレがボトルネックになりがちです。
-      比較の際は同じ端末・同じカメラ・同じ解像度・同じバーコードで、起動→検出を数回ずつ計測して平均化してください。
-    */
+    // 備考:
+    // - 今回の "Cannot read properties of undefined (reading 'data')" を防ぐため、
+    //   Quagga/Quagga2 の onProcessed では result の存在と各プロパティの存在を厳密にチェック。
+    // - inputStream.target は実在の video 要素に固定し、constraints も一致させて内部の描画ターゲットが undefined にならないようにしています。
+    // - start 前に stop、ハンドラの明示的解除で状態不整合を防止。
   </script>
 </body>
 </html>
