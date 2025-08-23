@@ -24,24 +24,35 @@ jobs:
         run: |
           # 最新のコミット情報を取得
           commit_hash=$(git rev-parse HEAD)
+          commit_short_hash=$(git rev-parse --short HEAD)
           commit_author=$(git log -1 --pretty=format:'%an')
+          commit_email=$(git log -1 --pretty=format:'%ae')
           commit_msg=$(git log -1 --pretty=format:'%s')
-          commit_body=$(git log -1 --pretty=format:'%b')
+          commit_body=$(git log -1 --pretty=format:'%b' | sed '/^$/d')
           commit_date=$(git log -1 --pretty=format:'%cd' --date=iso)
           
           echo "commit_hash=$commit_hash" >> $GITHUB_OUTPUT
+          echo "commit_short_hash=$commit_short_hash" >> $GITHUB_OUTPUT
           echo "commit_author=$commit_author" >> $GITHUB_OUTPUT
+          echo "commit_email=$commit_email" >> $GITHUB_OUTPUT
           echo "commit_msg=$commit_msg" >> $GITHUB_OUTPUT
           echo "commit_date=$commit_date" >> $GITHUB_OUTPUT
           
-          # コミットボディをファイルに保存（改行対応）
-          echo "$commit_body" > commit_body.txt
+          # コミットボディをファイルに保存（空行除去、空の場合は何も書かない）
+          if [ -n "$commit_body" ] && [ "$commit_body" != "$commit_msg" ]; then
+            echo "$commit_body" > commit_body.txt
+            echo "has_body=true" >> $GITHUB_OUTPUT
+          else
+            touch commit_body.txt
+            echo "has_body=false" >> $GITHUB_OUTPUT
+          fi
           
           echo "📝 Commit Info:"
           echo "  Hash: $commit_hash"
-          echo "  Author: $commit_author"
+          echo "  Author: $commit_author ($commit_email)"
           echo "  Message: $commit_msg"
           echo "  Date: $commit_date"
+          echo "  Has Body: $([ -s commit_body.txt ] && echo 'Yes' || echo 'No')"
 
       - name: Get latest release tag (hex-aware)
         id: get_latest_tag
@@ -100,28 +111,34 @@ jobs:
           latest_tag="${{ steps.get_latest_tag.outputs.latest_tag }}"
           
           if [ -z "$latest_tag" ]; then
-            echo "No previous release found"
+            echo "📋 No previous release found - this will be the initial release"
             commits_count=1
-            commits_log="Initial release"
+            echo "- Initial release commit" > commits_log.txt
           else
             # 最新タグから現在までのコミット数と内容を取得
             commits_count=$(git rev-list ${latest_tag}..HEAD --count)
             
+            echo "📋 Checking commits since $latest_tag..."
+            echo "📊 Found $commits_count commits since last release"
+            
             if [ $commits_count -eq 0 ]; then
-              echo "📋 No new commits since $latest_tag"
-              commits_log="No new changes"
+              echo "⚠️ No new commits since $latest_tag"
+              echo "No new changes since last release" > commits_log.txt
             else
-              commits_log=$(git log ${latest_tag}..HEAD --pretty=format:'- %s (%h) by %an' --reverse)
-              echo "📋 Commits since $latest_tag ($commits_count commits):"
-              echo "$commits_log"
+              echo "📋 Generating commit log since $latest_tag..."
+              
+              # より詳細なコミット情報を取得
+              {
+                git log ${latest_tag}..HEAD --reverse --pretty=format:"- **%s** (%h)%n  *Author: %an*%n  *Date: %cd*%n" --date=short
+              } > commits_log.txt
+              
+              echo "📋 Commits since $latest_tag:"
+              cat commits_log.txt
             fi
           fi
           
           echo "commits_count=$commits_count" >> $GITHUB_OUTPUT
           echo "latest_tag=$latest_tag" >> $GITHUB_OUTPUT
-          
-          # コミットログをファイルに保存
-          echo "$commits_log" > commits_log.txt
 
       - name: Extract version from commit message or increment by 1 (hex)
         id: get_version
@@ -298,10 +315,12 @@ jobs:
           initial_tag="${{ steps.get_version.outputs.new_tag }}"
           commit_msg="${{ steps.commit_info.outputs.commit_msg }}"
           commit_author="${{ steps.commit_info.outputs.commit_author }}"
-          commit_hash="${{ steps.commit_info.outputs.commit_hash }}"
+          commit_email="${{ steps.commit_info.outputs.commit_email }}"
+          commit_hash="${{ steps.commit_info.outputs.commit_short_hash }}"
           commit_date="${{ steps.commit_info.outputs.commit_date }}"
           commits_count="${{ steps.commits_since_release.outputs.commits_count }}"
           latest_tag="${{ steps.get_latest_tag.outputs.latest_tag }}"
+          has_body="${{ steps.commit_info.outputs.has_body }}"
           
           # リリースノートをファイルに直接書き込み
           {
@@ -310,20 +329,21 @@ jobs:
             echo "**Version**: $tag"
             echo "**Release Date**: $(date '+%Y-%m-%d %H:%M:%S JST')"
             echo "**Commits Included**: $commits_count commits"
-            echo ""
             
             # バージョン自動調整の説明
             if [ "$initial_tag" != "$tag" ]; then
-              echo "> **Note**: Originally planned as $initial_tag, but automatically adjusted to $tag due to existing tags."
               echo ""
+              echo "> **Note**: Originally planned as $initial_tag, but automatically adjusted to $tag due to existing tags."
             fi
             
+            echo ""
             echo "## 📝 Latest Commit"
             echo ""
             echo "- **Message**: $commit_msg"
             echo "- **Author**: $commit_author"
-            echo "- **Hash**: $commit_hash"
+            echo "- **Hash**: \`$commit_hash\`"
             echo "- **Date**: $commit_date"
+            
             echo ""
             echo "## 📊 Changes Since Last Release"
             echo ""
@@ -338,16 +358,28 @@ jobs:
             
             echo ""
             echo "## 📦 Assets"
+            echo ""
             echo "- Source code archive (ZIP)"
+            echo "- All source files as of commit \`$commit_hash\`"
             
-            # コミットボディがある場合は追加
-            if [ -s commit_body.txt ]; then
+            # コミットボディがある場合のみ追加
+            if [ "$has_body" == "true" ] && [ -s commit_body.txt ]; then
               echo ""
-              echo "## 📖 Commit Details"
+              echo "## 📖 Additional Commit Details"
               echo ""
+              echo "\`\`\`"
               cat commit_body.txt
+              echo "\`\`\`"
             fi
+            
+            echo ""
+            echo "---"
+            echo "*Generated automatically by GitHub Actions*"
+            
           } > release_notes.md
+          
+          echo "📝 Generated release notes:"
+          cat release_notes.md
 
       - name: Create GitHub Release
         if: steps.check_commits.outputs.skip_release == 'false' && steps.find_available_tag.outputs.found == 'true'
