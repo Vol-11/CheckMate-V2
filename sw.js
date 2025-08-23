@@ -10,7 +10,7 @@ const urlsToCache = [
     '/CheckMate-V2/js/dark_mode_startup.js',
     '/CheckMate-V2/icons/icon-192.png',
     '/CheckMate-V2/icons/icon-512.png',
-    'https://unpkg.com/quagga@0.12.1/dist/quagga.min.js'
+    'https://unpkg.com/@zxing/library@latest'
 ];
 
 self.addEventListener('install', event => {
