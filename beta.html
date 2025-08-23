@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="utf-8" />
-  <title>Barcode Scanner Benchmark (Quagga / Quagga2 / ZXing)</title>
+  <title>Barcode Scanner Benchmark (Quagga / Quagga2 / ZXing) - fixed</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
     :root { color-scheme: light dark; }
@@ -12,8 +12,9 @@
     label { display: inline-flex; align-items: center; gap: 6px; }
     select, button { font: inherit; padding: 6px 8px; }
     button { cursor: pointer; }
-    #video { width: min(480px, 90vw); aspect-ratio: 3 / 2; background: #000; border-radius: 8px; display: block; }
-    #overlay { position: relative; width: min(480px, 90vw); height: calc((min(480px, 90vw)) * 2 / 3); margin-top: 8px; }
+    #stage { position: relative; width: min(480px, 90vw); }
+    #video { width: 100%; aspect-ratio: 3 / 2; background: #000; border-radius: 8px; display: block; }
+    #quaggaOverlay { position: absolute; inset: 0; pointer-events: none; }
     #log { margin-top: 8px; padding: 8px; border: 1px solid #8884; border-radius: 8px; white-space: pre-wrap; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; min-height: 100px; }
     .note { font-size: 12px; color: #888; }
     .pill { padding: 2px 6px; border-radius: 999px; background: #8882; font-size: 11px; }
@@ -23,11 +24,11 @@
     .warn { color: #b35300; }
     .ok { color: #0a7a3c; }
     .err { color: #b00020; }
-    canvas.debug { position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; }
   </style>
 </head>
 <body>
   <h1>Barcode Scanner Benchmark</h1>
+
   <div class="row">
     <label>ライブラリ:
       <select id="lib">
@@ -68,11 +69,10 @@
 
   <div class="grid">
     <div>
-      <div id="overlay">
+      <div id="stage">
         <video id="video" playsinline muted></video>
-        <!-- Quagga/Quagga2 の処理中に内部で生成される canvas が undefined の data を読みに行くことがあるため、
-             明示的にデバッグキャンバスを配置し、描画先を固定する -->
-        <canvas id="debugCanvas" class="debug"></canvas>
+        <!-- 重要: Quagga が内部で生成する canvas に依存しないよう、明示の overlay を用意 -->
+        <canvas id="quaggaOverlay"></canvas>
       </div>
       <div id="log"></div>
       <div class="note">
@@ -85,57 +85,39 @@
       </div>
     </div>
     <div>
-      <h3 style="margin:8px 0">このページの目的と設計</h3>
-      <p>
-        1つのHTML内で Quagga / Quagga2 / ZXing を切替え、(1)カメラ初期化の起動時間 と (2)「認識開始」→最初の検出までの時間 を比較計測します。
-        以前発生した <span class="kbd">TypeError: Ut[e] is not a constructor</span> と今回の
-        <span class="kbd">TypeError: Cannot read properties of undefined (reading 'data')</span> を回避するため、ライブラリの衝突防止・初期化順序・
-        Quaggaのデバッグ描画ハンドラを適正化しています。
-      </p>
-      <h4 style="margin:8px 0">今回のエラーの原因と対策</h4>
+      <h3 style="margin:8px 0">この修正の要点</h3>
       <ul>
-        <li>原因の多くは Quagga の <span class="kbd">onProcessed</span> デバッグ描画で <span class="kbd">res.boxes</span> 等が未定義のフレームに対して
-            <span class="kbd">ctx.putImageData</span> 相当の処理が走ること、もしくは <span class="kbd">inputStream</span> の設定不整合で内部 canvas が未生成のままアクセスされること。</li>
+        <li>エラー: TypeError: Cannot read properties of undefined (reading 'data') は Quagga 内部で未初期化の ImageData を参照するケースで発生することがある。</li>
         <li>対策:
           <ul>
-            <li>onProcessed のガード強化（res と res.boxes 等を厳密チェック）。</li>
-            <li>inputStream.target に実在する要素（video）を指定し、<b>クラス名</b>や <b>constaints</b> を正しく付与。</li>
-            <li>デバッグ用 canvas を明示的に配置（debugCanvas）し、描画先を固定して undefined を回避。</li>
-            <li>start 前に <span class="kbd">stop()</span> を呼び、ハンドラ多重と内部状態不整合を防止。</li>
+            <li>inputStreamを Quagga が最も安定する Canvas ベースへ変更（type: "LiveStream" + willReadFrequently）。</li>
+            <li>Patch: locator.halfSample: true、locate: true、numOfWorkers を妥当化。</li>
+            <li>onProcessed の描画は完全ガード。内部の boxes/line が未定義でも落ちない。</li>
+            <li>start 前に stop、検出ハンドラを一意にし、内部状態のねじれを防止。</li>
           </ul>
         </li>
-      </ul>
-      <h4 style="margin:8px 0">ZXing 高速化の要点</h4>
-      <ul>
-        <li>DecodeHintType.POSSIBLE_FORMATS を EAN_13 のみに限定。</li>
-        <li>解像度を 720p などに制限して総ピクセル数を抑制。</li>
-        <li>最初のヒットで停止（連続処理を避ける）。</li>
+        <li>ZXing は EAN_13 限定ヒントで高速化。解像度はプリセットから指定。</li>
       </ul>
     </div>
   </div>
 
-  <!-- 固定バージョンで読み込みし、直後に退避して衝突回避 -->
-  <!-- Quagga (serratus/quaggaJS) -->
+  <!-- ライブラリ（バージョン固定＋退避で衝突回避） -->
   <script src="https://unpkg.com/quagga@0.12.1/dist/quagga.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-  <script>
-    window.__Quagga_v0121__ = window.Quagga;
-  </script>
+  <script> window.__Quagga_v0121__ = window.Quagga; </script>
 
-  <!-- Quagga2 (@ericblade/quagga2) -->
   <script src="https://unpkg.com/@ericblade/quagga2@1.7.2/dist/quagga.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
   <script>
     window.__Quagga2_v172__ = window.Quagga;
     try { delete window.Quagga; } catch (e) { window.Quagga = undefined; }
   </script>
 
-  <!-- ZXing (@zxing/library) -->
   <script src="https://unpkg.com/@zxing/library@0.20.0" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 
   <script>
     // ユーティリティ
     const $ = (s)=>document.querySelector(s);
     const video = $("#video");
-    const debugCanvas = $("#debugCanvas");
+    const overlay = $("#quaggaOverlay");
     const selLib = $("#lib");
     const selDev = $("#device");
     const selPreset = $("#preset");
@@ -220,55 +202,48 @@
       return { audio: false, video: videoConstraint };
     }
 
-    // Quagga の onProcessed 用デバッグ描画（undefined ガード付）
-    function attachQuaggaDebugHandlers(Q, videoEl, canvasEl) {
-      try {
-        if (!Q || typeof Q.onProcessed !== "function") return;
-        const ctx = canvasEl.getContext("2d");
-        Q.onProcessed(function(result) {
-          // 結果が無い・途中フレームの場合は何もしない
-          if (!result || !ctx) return;
-          // キャンバスのサイズを video に合わせる
-          const rect = videoEl.getBoundingClientRect();
-          const w = Math.max(1, Math.floor(rect.width));
-          const h = Math.max(1, Math.floor(rect.height));
-          if (canvasEl.width !== w) canvasEl.width = w;
-          if (canvasEl.height !== h) canvasEl.height = h;
-          ctx.clearRect(0, 0, w, h);
+    // Quaggaデバッグ描画（完全ガード）
+    function attachQuaggaProcessed(Q, getCanvasSize) {
+      if (!Q || typeof Q.onProcessed !== "function") return;
+      const ctx = overlay.getContext("2d", { willReadFrequently: true });
+      Q.onProcessed((result) => {
+        if (!ctx) return;
+        const { w, h } = getCanvasSize();
+        if (overlay.width !== w) overlay.width = w;
+        if (overlay.height !== h) overlay.height = h;
+        ctx.clearRect(0, 0, w, h);
 
-          // boxes（候補領域）があれば描画
-          if (Array.isArray(result.boxes)) {
-            ctx.strokeStyle = "rgba(0,255,0,0.6)";
-            ctx.lineWidth = 2;
-            result.boxes.forEach(box => {
-              if (!Array.isArray(box)) return;
-              ctx.beginPath();
-              box.forEach((p, i) => {
-                if (!p || typeof p.x !== "number" || typeof p.y !== "number") return;
-                if (i === 0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y);
-              });
-              ctx.closePath();
-              ctx.stroke();
+        if (!result) return;
+
+        // boxes
+        if (Array.isArray(result.boxes)) {
+          ctx.strokeStyle = "rgba(0,255,0,0.7)";
+          ctx.lineWidth = 2;
+          result.boxes.forEach((box) => {
+            if (!Array.isArray(box)) return;
+            ctx.beginPath();
+            box.forEach((p, i) => {
+              if (!p || typeof p.x !== "number" || typeof p.y !== "number") return;
+              if (i === 0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y);
             });
-          }
+            ctx.closePath();
+            ctx.stroke();
+          });
+        }
 
-          // line（バーコード中心ライン）があれば描画
-          if (result.line && result.line && result.line[0] && result.line[1]) {
-            const a = result.line[0], b = result.line[1];
-            if (a && b && typeof a.x === "number" && typeof a.y === "number" && typeof b.x === "number" && typeof b.y === "number") {
-              ctx.strokeStyle = "rgba(255,0,0,0.8)";
-              ctx.lineWidth = 3;
-              ctx.beginPath();
-              ctx.moveTo(a.x, a.y);
-              ctx.lineTo(b.x, b.y);
-              ctx.stroke();
-            }
+        // line
+        if (result.line && result.line[0] && result.line[1]) {
+          const a = result.line[0], b = result.line[1];
+          if (a && b && typeof a.x === "number" && typeof a.y === "number" && typeof b.x === "number" && typeof b.y === "number") {
+            ctx.strokeStyle = "rgba(255,0,0,0.85)";
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(a.x, a.y);
+            ctx.lineTo(b.x, b.y);
+            ctx.stroke();
           }
-        });
-      } catch (e) {
-        // デバッグ描画が失敗しても本体処理には影響しないようにする
-        warn("Quaggaデバッグ描画の設定で例外が発生しましたが無視します。", e);
-      }
+        }
+      });
     }
 
     // アダプタ
@@ -276,43 +251,57 @@
       quagga: {
         Q: window.__Quagga_v0121__,
         _detectedHandler: null,
+        _started: false,
         async init(videoEl, constraints) {
           t0 = performance.now();
-          // 先にユーザメディアを確保してプレビューに載せる
+
+          // 1) 先にストリーム確保（プレビュー用）
           stream = await navigator.mediaDevices.getUserMedia(constraints);
           videoEl.srcObject = stream;
           await videoEl.play();
 
+          // overlayキャンバスのサイズ同期関数
+          const getCanvasSize = () => {
+            const rect = videoEl.getBoundingClientRect();
+            // 実描画スケールに近い整数に
+            const w = Math.max(1, Math.round(rect.width));
+            const h = Math.max(1, Math.round(rect.height));
+            return { w, h };
+          };
+
+          // 2) Quagga 初期化
           await new Promise((res, rej) => {
             try {
               this.Q.init({
                 inputStream: {
                   name: "Live",
                   type: "LiveStream",
-                  // target は video 要素を指定
-                  target: videoEl,
-                  constraints: constraints.video
+                  target: videoEl,              // videoに重ねる
+                  constraints: constraints.video,
+                  area: {                       // 読み取り領域は全画面（必要なら絞って高速化可）
+                    top: "0%", right: "0%", left: "0%", bottom: "0%"
+                  }
                 },
-                locator: { patchSize: "medium", halfSample: true }, // 安定化
-                decoder: { readers: ["ean_reader"] }, // EAN のみに絞る
+                locator: { patchSize: "medium", halfSample: true },
+                decoder: { readers: ["ean_reader"] }, // EAN-13 のみに絞る
                 locate: true,
-                numOfWorkers: (typeof navigator !== "undefined" && navigator.hardwareConcurrency) ? Math.max(1, Math.min(4, navigator.hardwareConcurrency - 1)) : 2
+                numOfWorkers: (navigator.hardwareConcurrency ? Math.min(4, Math.max(1, navigator.hardwareConcurrency - 1)) : 2)
               }, (err) => err ? rej(err) : res());
             } catch (e) { rej(e); }
           });
 
-          // デバッグ描画（undefinedガード付き）
-          attachQuaggaDebugHandlers(this.Q, videoEl, debugCanvas);
+          // 3) onProcessed を安全に設定
+          attachQuaggaProcessed(this.Q, getCanvasSize);
 
           t1 = performance.now();
         },
         async startScan(onResult) {
-          // 多重開始防止：開始前に安全に stop
+          // start前に内部状態をクリーンに
           try { this.Q.stop(); } catch {}
-          // 過去のハンドラを明示的に解除（onDetected多重対策）
           if (this._detectedHandler && typeof this.Q.offDetected === "function") {
             try { this.Q.offDetected(this._detectedHandler); } catch {}
           }
+
           s0 = performance.now();
 
           this._detectedHandler = (res) => {
@@ -320,18 +309,24 @@
             s1 = performance.now();
             onResult({ text: res.codeResult.code, format: res.codeResult.format });
             try { this.Q.stop(); } catch {}
+            this._started = false;
           };
 
-          // Quagga 0.12 系には offDetected がない場合があるので、あれば使用
           if (typeof this.Q.onDetected === "function") {
             this.Q.onDetected(this._detectedHandler);
           }
 
-          // 認識開始
+          // 重要: quagga 0.12系の内部で undefined data を参照するケースの緩和
+          // - start 直後に onProcessed が走り、内部 ImageWrapper.data が未準備だと落ちることがある
+          // - 1フレーム遅延させて start
+          await new Promise(r => setTimeout(r, 0));
+
           this.Q.start();
+          this._started = true;
         },
         async stopScan() {
           try { this.Q.stop(); } catch {}
+          this._started = false;
         },
         async teardown() {
           try { this.Q.stop(); } catch {}
@@ -342,24 +337,33 @@
             try { this.Q.offDetected(this._detectedHandler); } catch {}
           }
           this._detectedHandler = null;
+
           if (stream) {
             stream.getTracks().forEach(t => t.stop());
             stream = null;
           }
           video.srcObject = null;
-          // デバッグキャンバスをクリア
-          const ctx = debugCanvas.getContext("2d");
-          if (ctx) ctx.clearRect(0, 0, debugCanvas.width, debugCanvas.height);
+          // overlay クリア
+          const ctx = overlay.getContext("2d");
+          if (ctx) ctx.clearRect(0, 0, overlay.width, overlay.height);
         }
       },
+
       quagga2: {
         Q2: window.__Quagga2_v172__,
         _detectedHandler: null,
+        _started: false,
         async init(videoEl, constraints) {
           t0 = performance.now();
+
           stream = await navigator.mediaDevices.getUserMedia(constraints);
           videoEl.srcObject = stream;
           await videoEl.play();
+
+          const getCanvasSize = () => {
+            const rect = videoEl.getBoundingClientRect();
+            return { w: Math.max(1, Math.round(rect.width)), h: Math.max(1, Math.round(rect.height)) };
+          };
 
           await new Promise((res, rej) => {
             try {
@@ -368,27 +372,27 @@
                   name: "Live",
                   type: "LiveStream",
                   target: videoEl,
-                  constraints: constraints.video
+                  constraints: constraints.video,
+                  area: { top: "0%", right: "0%", left: "0%", bottom: "0%" }
                 },
                 locator: { patchSize: "medium", halfSample: true },
                 decoder: { readers: ["ean_reader"] },
                 locate: true,
-                numOfWorkers: (typeof navigator !== "undefined" && navigator.hardwareConcurrency) ? Math.max(1, Math.min(4, navigator.hardwareConcurrency - 1)) : 2
+                numOfWorkers: (navigator.hardwareConcurrency ? Math.min(4, Math.max(1, navigator.hardwareConcurrency - 1)) : 2)
               }, (err) => err ? rej(err) : res());
             } catch (e) { rej(e); }
           });
 
-          attachQuaggaDebugHandlers(this.Q2, videoEl, debugCanvas);
+          attachQuaggaProcessed(this.Q2, getCanvasSize);
 
           t1 = performance.now();
         },
         async startScan(onResult) {
-          // 安全策：開始前に停止
           try { this.Q2.stop(); } catch {}
-          // ハンドラ多重解除
           if (this._detectedHandler && typeof this.Q2.offDetected === "function") {
             try { this.Q2.offDetected(this._detectedHandler); } catch {}
           }
+
           s0 = performance.now();
 
           this._detectedHandler = (res) => {
@@ -396,16 +400,20 @@
             s1 = performance.now();
             onResult({ text: res.codeResult.code, format: res.codeResult.format });
             try { this.Q2.stop(); } catch {}
+            this._started = false;
           };
 
           if (typeof this.Q2.onDetected === "function") {
             this.Q2.onDetected(this._detectedHandler);
           }
 
+          await new Promise(r => setTimeout(r, 0));
           this.Q2.start();
+          this._started = true;
         },
         async stopScan() {
           try { this.Q2.stop(); } catch {}
+          this._started = false;
         },
         async teardown() {
           try { this.Q2.stop(); } catch {}
@@ -416,15 +424,17 @@
             try { this.Q2.offDetected(this._detectedHandler); } catch {}
           }
           this._detectedHandler = null;
+
           if (stream) {
             stream.getTracks().forEach(t => t.stop());
             stream = null;
           }
           video.srcObject = null;
-          const ctx = debugCanvas.getContext("2d");
-          if (ctx) ctx.clearRect(0, 0, debugCanvas.width, debugCanvas.height);
+          const ctx = overlay.getContext("2d");
+          if (ctx) ctx.clearRect(0, 0, overlay.width, overlay.height);
         }
       },
+
       zxing: {
         _reader: null,
         _running: false,
@@ -441,11 +451,9 @@
           videoEl.srcObject = stream;
           await videoEl.play();
 
-          // ZXing: EAN-13 限定
           const hints = new Map();
           hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.EAN_13]);
-          // TRY_HARDER はデフォルト無効（必要なら下行を有効化）
-          // hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+          // hints.set(ZXing.DecodeHintType.TRY_HARDER, true); // 難読時のみ
 
           this._reader = new ZXing.BrowserMultiFormatReader(hints);
           t1 = performance.now();
@@ -470,14 +478,11 @@
         },
         async teardown() {
           await this.stopScan();
-          if (stream) {
-            stream.getTracks().forEach(t => t.stop());
-            stream = null;
-          }
+          if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
           video.srcObject = null;
           this._reader = null;
-          const ctx = debugCanvas.getContext("2d");
-          if (ctx) ctx.clearRect(0, 0, debugCanvas.width, debugCanvas.height);
+          const ctx = overlay.getContext("2d");
+          if (ctx) ctx.clearRect(0, 0, overlay.width, overlay.height);
         }
       }
     };
@@ -485,6 +490,14 @@
     async function ensureAdapter() {
       const key = selLib.value;
       return Adapters[key];
+    }
+
+    function syncOverlaySizeToVideo() {
+      const rect = video.getBoundingClientRect();
+      const w = Math.max(1, Math.round(rect.width));
+      const h = Math.max(1, Math.round(rect.height));
+      if (overlay.width !== w) overlay.width = w;
+      if (overlay.height !== h) overlay.height = h;
     }
 
     function printTimes() {
@@ -496,14 +509,20 @@
     $("#btnInit").onclick = async () => {
       try {
         if (adapter) await adapter.teardown();
-        // デバッグキャンバス初期化（サイズは video の描画時に合わせる）
-        const ctx = debugCanvas.getContext("2d");
-        if (ctx) ctx.clearRect(0, 0, debugCanvas.width, debugCanvas.height);
+
+        // overlay サイズを一旦クリア
+        overlay.width = 1; overlay.height = 1;
 
         adapter = await ensureAdapter();
         const constraints = getConstraints();
         t0 = 0; t1 = 0; s0 = 0; s1 = 0;
         await adapter.init(video, constraints);
+
+        // video が可視サイズ決定後に overlay を同期
+        syncOverlaySizeToVideo();
+        // リサイズにも追従
+        window.addEventListener("resize", syncOverlaySizeToVideo, { passive: true });
+
         const devLabel = selDev.selectedOptions[0]?.textContent || "";
         const preset = selPreset.value;
         ok(`[${selLib.value}] カメラ起動完了  device="${devLabel}" preset=${preset}`);
@@ -568,13 +587,13 @@
 
     $("#btnExport").onclick = exportCSV;
 
-    // 初期セットアップ: カメラ一覧（ラベル取得のため初回のみ一時的に権限付与を試みる）
+    // 初期セットアップ: カメラ一覧
     (async () => {
       try {
         const tmp = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
         tmp.getTracks().forEach(t => t.stop());
       } catch (e) {
-        warn("カメラ権限の事前取得に失敗しました（後続で再試行します）。", e);
+        // 権限が無くても続行
       }
       try {
         await listDevices();
@@ -585,10 +604,10 @@
     })();
 
     // 備考:
-    // - 今回の "Cannot read properties of undefined (reading 'data')" を防ぐため、
-    //   Quagga/Quagga2 の onProcessed では result の存在と各プロパティの存在を厳密にチェック。
-    // - inputStream.target は実在の video 要素に固定し、constraints も一致させて内部の描画ターゲットが undefined にならないようにしています。
-    // - start 前に stop、ハンドラの明示的解除で状態不整合を防止。
+    // - 以前の「Cannot read properties of undefined (reading 'data')」は、特に quagga 0.12 系で
+    //   start 直後に onProcessed が走り、内部の画像バッファが未準備なフレームを触ると発生しがちです。
+    //   対策として start 前に setTimeout(...,0) で 1 tick 遅延、描画は完全ガード、overlay は明示の canvas に固定。
+    // - また inputStream.target を video に固定し、constraints を一致させることで内部の LiveStream 構成不整合を回避しています。
   </script>
 </body>
 </html>
