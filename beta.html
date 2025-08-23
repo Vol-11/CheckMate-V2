@@ -3,31 +3,47 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Quagga vs Quagga2 vs ZXing ベンチマーク</title>
+    <title>Quagga vs Quagga2 vs ZXing ベンチマーク (EAN-13特化)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/quagga@latest/dist/quagga.min.js"></script>
     <script src="https://unpkg.com/@ericblade/quagga2@latest/dist/quagga.min.js"></script>
     <script src="https://unpkg.com/@zxing/library@latest"></script>
     <style>
-        #interactive video {
-            width: 100%;
-            max-width: 640px;
-            height: auto;
+        #interactive {
+            position: relative;
         }
+        #interactive video,
         #interactive canvas {
             position: absolute;
             top: 0;
             left: 0;
+            width: 100%;
+            height: 100%;
+        }
+        #interactive canvas {
+            pointer-events: none;
+        }
+        #zxingVideo {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
         }
         .viewport {
             position: relative;
+            background: #000;
+        }
+        .drawingBuffer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 10;
         }
     </style>
 </head>
 <body class="bg-gray-100 min-h-screen py-8">
     <div class="container mx-auto px-4 max-w-4xl">
         <h1 class="text-3xl font-bold text-center text-gray-800 mb-8">
-            Quagga vs Quagga2 vs ZXing ベンチマーク
+            Quagga vs Quagga2 vs ZXing ベンチマーク (EAN-13特化)
         </h1>
         
         <!-- HTTPS警告 -->
@@ -48,9 +64,9 @@
         
         <!-- 設定パネル -->
         <div class="bg-white rounded-lg shadow-lg p-6 mb-6">
-            <h2 class="text-xl font-semibold mb-4">設定</h2>
+            <h2 class="text-xl font-semibold mb-4">設定 (EAN-13バーコード専用)</h2>
             
-            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
                 <!-- ライブラリ選択 -->
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-2">
@@ -72,19 +88,6 @@
                         <option value="640x480">640x480</option>
                         <option value="800x600">800x600</option>
                         <option value="1280x720">1280x720 (HD)</option>
-                    </select>
-                </div>
-                
-                <!-- バーコードタイプ -->
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-2">
-                        バーコードタイプ
-                    </label>
-                    <select id="barcodeType" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
-                        <option value="ean">EAN-13</option>
-                        <option value="ean_8">EAN-8</option>
-                        <option value="code_128">Code 128</option>
-                        <option value="code_39">Code 39</option>
                     </select>
                 </div>
                 
@@ -121,8 +124,8 @@
             <h2 class="text-xl font-semibold mb-4">カメラプレビュー</h2>
             <div class="flex justify-center">
                 <div id="interactive" class="viewport border-2 border-gray-300 rounded-lg overflow-hidden" 
-                     style="width: 100%; max-width: 640px; height: 480px; position: relative;">
-                    <video id="zxingVideo" style="width: 100%; height: 100%; object-fit: cover; display: none;"></video>
+                     style="width: 100%; max-width: 640px; height: 480px;">
+                    <video id="zxingVideo" style="display: none;"></video>
                     <div class="flex items-center justify-center h-full text-gray-500" id="placeholder">
                         カメラを開始してください
                     </div>
@@ -189,7 +192,7 @@
     </div>
     
     <script>
-        class BarcodeLibraryBenchmark {
+        class EAN13BenchmarkTool {
             constructor() {
                 this.isScanning = false;
                 this.currentLibrary = 'quagga';
@@ -199,6 +202,7 @@
                 this.availableCameras = [];
                 this.scanDetectedHandler = null;
                 this.zxingCodeReader = null;
+                this.currentStream = null;
                 
                 this.checkHttps();
                 this.initializeElements();
@@ -215,7 +219,6 @@
             initializeElements() {
                 this.librarySelect = document.getElementById('librarySelect');
                 this.resolutionSelect = document.getElementById('resolutionSelect');
-                this.barcodeType = document.getElementById('barcodeType');
                 this.cameraSelect = document.getElementById('cameraSelect');
                 this.startCameraBtn = document.getElementById('startCamera');
                 this.stopCameraBtn = document.getElementById('stopCamera');
@@ -242,7 +245,6 @@
             
             async enumerateCameras() {
                 try {
-                    // カメラアクセス許可を取得
                     await navigator.mediaDevices.getUserMedia({ video: true }).then(stream => {
                         stream.getTracks().forEach(track => track.stop());
                     });
@@ -285,44 +287,11 @@
                 return window.Quagga;
             }
             
-            getBarcodeReader() {
-                const barcodeType = this.barcodeType.value;
-                switch (barcodeType) {
-                    case 'ean':
-                        return 'ean_reader';
-                    case 'ean_8':
-                        return 'ean_8_reader';
-                    case 'code_128':
-                        return 'code_128_reader';
-                    case 'code_39':
-                        return 'code_39_reader';
-                    default:
-                        return 'ean_reader';
-                }
-            }
-            
-            getZXingFormat() {
-                const barcodeType = this.barcodeType.value;
-                switch (barcodeType) {
-                    case 'ean':
-                        return ZXing.BarcodeFormat.EAN_13;
-                    case 'ean_8':
-                        return ZXing.BarcodeFormat.EAN_8;
-                    case 'code_128':
-                        return ZXing.BarcodeFormat.CODE_128;
-                    case 'code_39':
-                        return ZXing.BarcodeFormat.CODE_39;
-                    default:
-                        return ZXing.BarcodeFormat.EAN_13;
-                }
-            }
-            
             async startCamera() {
                 const startTime = performance.now();
                 this.cameraStartTime = startTime;
                 
                 try {
-                    // 既存のスキャナーを停止
                     if (this.isScanning) {
                         this.stopCamera();
                         await new Promise(resolve => setTimeout(resolve, 500));
@@ -348,7 +317,6 @@
                     this.isScanning = false;
                     this.updateButtonStates();
                     
-                    // プレースホルダーを再表示
                     const placeholder = document.getElementById('placeholder');
                     if (placeholder) {
                         placeholder.style.display = 'flex';
@@ -357,25 +325,24 @@
             }
             
             async startZXingCamera(startTime, resolution) {
+                // ZXingをEAN-13のみに制限して高速化
                 this.zxingCodeReader = new ZXing.BrowserMultiFormatReader();
                 
-                // ZXingビデオを表示
                 this.zxingVideo.style.display = 'block';
                 
-                // カメラストリームを開始
                 const selectedDeviceId = this.cameraSelect.value || undefined;
                 
                 const constraints = {
                     video: {
-                        width: { min: resolution.width },
-                        height: { min: resolution.height },
+                        width: { ideal: resolution.width },
+                        height: { ideal: resolution.height },
                         facingMode: selectedDeviceId ? undefined : "environment",
                         deviceId: selectedDeviceId ? { exact: selectedDeviceId } : undefined
                     }
                 };
                 
-                const stream = await navigator.mediaDevices.getUserMedia(constraints);
-                this.zxingVideo.srcObject = stream;
+                this.currentStream = await navigator.mediaDevices.getUserMedia(constraints);
+                this.zxingVideo.srcObject = this.currentStream;
                 await this.zxingVideo.play();
                 
                 const endTime = performance.now();
@@ -388,23 +355,21 @@
             
             async startQuaggaCamera(startTime, resolution) {
                 const QuaggaLib = this.getQuaggaInstance();
-                const reader = this.getBarcodeReader();
                 
-                // Quaggaビデオを非表示
                 this.zxingVideo.style.display = 'none';
                 
                 const constraints = {
-                    width: { min: resolution.width },
-                    height: { min: resolution.height },
+                    width: { ideal: resolution.width },
+                    height: { ideal: resolution.height },
                     facingMode: "environment"
                 };
                 
-                // カメラが選択されている場合はdeviceIdを追加
                 if (this.cameraSelect.value) {
                     constraints.deviceId = { exact: this.cameraSelect.value };
                     delete constraints.facingMode;
                 }
                 
+                // EAN-13に固定して高速化
                 const config = {
                     inputStream: {
                         name: "Live",
@@ -412,9 +377,15 @@
                         target: document.querySelector('#interactive'),
                         constraints: constraints
                     },
+                    locator: {
+                        patchSize: "medium",
+                        halfSample: true
+                    },
+                    numOfWorkers: navigator.hardwareConcurrency ? Math.min(navigator.hardwareConcurrency, 2) : 1,
                     decoder: {
-                        readers: [reader]
-                    }
+                        readers: ["ean_reader"] // EAN-13のみに固定
+                    },
+                    locate: true
                 };
                 
                 await new Promise((resolve, reject) => {
@@ -446,25 +417,25 @@
             stopCamera() {
                 try {
                     if (this.currentLibrary === 'zxing') {
-                        // ZXingの停止
                         if (this.zxingCodeReader) {
                             this.zxingCodeReader.reset();
                             this.zxingCodeReader = null;
                         }
                         
-                        // ビデオストリームを停止
+                        if (this.currentStream) {
+                            this.currentStream.getTracks().forEach(track => track.stop());
+                            this.currentStream = null;
+                        }
+                        
                         if (this.zxingVideo.srcObject) {
-                            this.zxingVideo.srcObject.getTracks().forEach(track => track.stop());
                             this.zxingVideo.srcObject = null;
                         }
                         this.zxingVideo.style.display = 'none';
                         
                     } else {
-                        // QuaggaまたはQuagga2の停止
                         const QuaggaLib = this.getQuaggaInstance();
                         
                         if (this.isScanning) {
-                            // 検出イベントハンドラーをクリア
                             if (this.scanDetectedHandler) {
                                 QuaggaLib.offDetected(this.scanDetectedHandler);
                                 this.scanDetectedHandler = null;
@@ -479,7 +450,6 @@
                     this.isScanning = false;
                     this.updateButtonStates();
                     
-                    // プレースホルダーを再表示
                     const placeholder = document.getElementById('placeholder');
                     if (placeholder) {
                         placeholder.style.display = 'flex';
@@ -513,9 +483,10 @@
                     throw new Error('ZXing code reader not initialized');
                 }
                 
-                // 形式を指定してヒントを作成
+                // EAN-13のみに制限したヒント
                 const hints = new Map();
-                hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [this.getZXingFormat()]);
+                hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.EAN_13]);
+                hints.set(ZXing.DecodeHintType.TRY_HARDER, false); // 高速化のためfalse
                 
                 try {
                     const result = await this.zxingCodeReader.decodeOnceFromVideoDevice(
@@ -532,14 +503,13 @@
                     this.resultEl.classList.remove('hidden');
                     this.resultTextEl.textContent = result.text;
                     
-                    // 測定結果を保存
                     this.saveMeasurement(cameraTime, scanTime, result.text);
                     
                 } catch (error) {
                     if (error instanceof ZXing.NotFoundException) {
                         setTimeout(() => {
                             if (this.scanTimeEl.textContent === '測定中...') {
-                                this.scanTimeEl.textContent = 'バーコードが見つかりません';
+                                this.scanTimeEl.textContent = 'EAN-13バーコードが見つかりません';
                             }
                         }, 5000);
                     } else {
@@ -551,12 +521,10 @@
             async performQuaggaScan() {
                 const QuaggaLib = this.getQuaggaInstance();
                 
-                // 既存のリスナーをクリア
                 if (this.scanDetectedHandler) {
                     QuaggaLib.offDetected(this.scanDetectedHandler);
                 }
                 
-                // 一回限りの検出イベントリスナーを設定
                 this.scanDetectedHandler = (result) => {
                     const endTime = performance.now();
                     const scanTime = Math.round(endTime - this.scanStartTime);
@@ -566,10 +534,8 @@
                     this.resultEl.classList.remove('hidden');
                     this.resultTextEl.textContent = result.codeResult.code;
                     
-                    // 測定結果を保存
                     this.saveMeasurement(cameraTime, scanTime, result.codeResult.code);
                     
-                    // イベントリスナーを削除
                     QuaggaLib.offDetected(this.scanDetectedHandler);
                     this.scanDetectedHandler = null;
                 };
@@ -592,13 +558,13 @@
                 let libraryName;
                 switch (this.currentLibrary) {
                     case 'quagga':
-                        libraryName = 'Quagga (latest)';
+                        libraryName = 'Quagga (EAN-13)';
                         break;
                     case 'quagga2':
-                        libraryName = 'Quagga2 (latest)';
+                        libraryName = 'Quagga2 (EAN-13)';
                         break;
                     case 'zxing':
-                        libraryName = 'ZXing (latest)';
+                        libraryName = 'ZXing (EAN-13)';
                         break;
                     default:
                         libraryName = this.currentLibrary;
@@ -680,7 +646,7 @@
         
         // アプリケーション初期化
         document.addEventListener('DOMContentLoaded', () => {
-            new BarcodeLibraryBenchmark();
+            new EAN13BenchmarkTool();
         });
     </script>
 </body>
