@@ -971,6 +971,7 @@ openDB().then(async () => {
   await loadItems();
   initializeChecklist();
   await updateCheckDisplay();
+  await NotificationManager.init(); // 通知マネージャーを初期化
   
   if (items.length === 0) {
     setTimeout(() => {
