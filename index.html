@@ -684,26 +684,7 @@ function getCenter(points) {
 }
 
 function processVideo(videoElement, canvasElement, animationFrameHolder) {
-    const ctx = canvasElement.getContext('2d', { willReadFrequently: true });
-    
-    function tick() {
-        if (videoElement.readyState === videoElement.HAVE_ENOUGH_DATA) {
-            canvasElement.width = videoElement.videoWidth;
-            canvasElement.height = videoElement.videoHeight;
-            ctx.drawImage(videoElement, 0, 0, canvasElement.width, canvasElement.height);
-            const imageData = ctx.getImageData(0, 0, canvasElement.width, canvasElement.height);
-            const data = imageData.data;
-            for (let i = 0; i < data.length; i += 4) {
-                const avg = (data[i] + data[i + 1] + data[i + 2]) / 3;
-                data[i] = avg;
-                data[i + 1] = avg;
-                data[i + 2] = avg;
-            }
-            ctx.putImageData(imageData, 0, 0);
-        }
-        animationFrameHolder.id = requestAnimationFrame(tick);
-    }
-    tick();
+    // Temporarily disabled for debugging
 }
 
 async function startScanning() {
@@ -713,27 +694,24 @@ async function startScanning() {
   statusMessage.className = 'p-3 rounded-lg mb-4 text-center font-medium bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-700';
   scanBtn.disabled = true;
   stopBtn.disabled = false;
+  canvas.style.display = 'none';
+  video.style.display = 'block';
 
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ video: { deviceId: selectedDeviceId } });
     video.srcObject = stream;
-    video.onloadedmetadata = () => {
-        video.play();
-        const animationFrameHolder = { id: null };
-        processVideo(video, canvas, animationFrameHolder);
-        animationFrameId = animationFrameHolder;
+    
+    codeReader.decodeFromVideoElement(video, (result, err) => {
+        if (result) {
+            onDetected(result);
+        }
+        if (err && !(err instanceof ZXing.NotFoundException)) {
+            console.error(err);
+            statusMessage.textContent = `❌ エラー: ${err.message}`;
+            statusMessage.className = 'p-3 rounded-lg mb-4 text-center font-medium bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-300 dark:border-red-700';
+        }
+    });
 
-        codeReader.decodeFromStream(stream, video, (result, err) => {
-            if (result) {
-                onDetected(result);
-            }
-            if (err && !(err instanceof ZXing.NotFoundException)) {
-                console.error(err);
-                statusMessage.textContent = `❌ エラー: ${err.message}`;
-                statusMessage.className = 'p-3 rounded-lg mb-4 text-center font-medium bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-300 dark:border-red-700';
-            }
-        });
-    };
     statusMessage.textContent = '🔍 バーコードを緑枠内に合わせてください';
     statusMessage.className = 'p-3 rounded-lg mb-4 text-center font-medium bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-700';
   } catch (err) {
@@ -753,13 +731,12 @@ function stopScanning() {
   if (video.srcObject) {
     video.srcObject.getTracks().forEach(track => track.stop());
   }
-  if (animationFrameId) {
-    cancelAnimationFrame(animationFrameId.id);
-  }
   statusMessage.textContent = '⏹ スキャン停止';
   statusMessage.className = 'p-3 rounded-lg mb-4 text-center font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600';
   scanBtn.disabled = false;
   stopBtn.disabled = true;
+  canvas.style.display = 'block';
+  video.style.display = 'none';
 }
 
 async function startCheckScanning() {
@@ -769,27 +746,24 @@ async function startCheckScanning() {
   checkStatusMessage.className = 'p-3 rounded-lg mb-4 text-center font-medium bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-700';
   checkScanBtn.disabled = true;
   checkStopBtn.disabled = false;
+  checkCanvas.style.display = 'none';
+  checkVideo.style.display = 'block';
 
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ video: { deviceId: checkSelectedDeviceId } });
     checkVideo.srcObject = stream;
-    checkVideo.onloadedmetadata = () => {
-        checkVideo.play();
-        const animationFrameHolder = { id: null };
-        processVideo(checkVideo, checkCanvas, animationFrameHolder);
-        checkAnimationFrameId = animationFrameHolder;
 
-        codeReader.decodeFromStream(stream, checkVideo, (result, err) => {
-            if (result) {
-                onCheckDetected(result);
-            }
-            if (err && !(err instanceof ZXing.NotFoundException)) {
-                console.error(err);
-                checkStatusMessage.textContent = `❌ エラー: ${err.message}`;
-                checkStatusMessage.className = 'p-3 rounded-lg mb-4 text-center font-medium bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-300 dark:border-red-700';
-            }
-        });
-    };
+    codeReader.decodeFromVideoElement(checkVideo, (result, err) => {
+        if (result) {
+            onCheckDetected(result);
+        }
+        if (err && !(err instanceof ZXing.NotFoundException)) {
+            console.error(err);
+            checkStatusMessage.textContent = `❌ エラー: ${err.message}`;
+            checkStatusMessage.className = 'p-3 rounded-lg mb-4 text-center font-medium bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-300 dark:border-red-700';
+        }
+    });
+
     checkStatusMessage.textContent = '🔍 バーコードを緑枠内に合わせてください';
     checkStatusMessage.className = 'p-3 rounded-lg mb-4 text-center font-medium bg-blue-50 dark:bg-blue-900/3d text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-700';
   } catch (err) {
@@ -809,13 +783,12 @@ function stopCheckScanning() {
   if (checkVideo.srcObject) {
     checkVideo.srcObject.getTracks().forEach(track => track.stop());
   }
-  if (checkAnimationFrameId) {
-    cancelAnimationFrame(checkAnimationFrameId.id);
-  }
   checkStatusMessage.textContent = '⏹ スキャン停止';
   checkStatusMessage.className = 'p-3 rounded-lg mb-4 text-center font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600';
   checkScanBtn.disabled = false;
   checkStopBtn.disabled = true;
+  checkCanvas.style.display = 'block';
+  checkVideo.style.display = 'none';
 }
 
 scanBtn.addEventListener('click', startScanning);
