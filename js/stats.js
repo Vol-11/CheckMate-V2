@@ -2,11 +2,15 @@
 async function updateStats() {
   const total = items.length;
 
-  // 今日の日付のアイテムを全て取得
-  const todayItems = await getItemsForDate(new Date());
+  // 明日の日付を取得
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  
+  // 明日の日付のアイテムを全て取得
+  const tomorrowItems = await getItemsForDate(tomorrow);
 
-  const checked = todayItems.filter(i => i.checked).length;
-  const today = todayItems.length;
+  const checked = tomorrowItems.filter(i => i.checked).length;
+  const today = tomorrowItems.length;
 
   document.getElementById('total-items').textContent = total;
   document.getElementById('checked-items').textContent = checked;
@@ -18,11 +22,15 @@ async function updateDetailedStats() {
   const categories = [...new Set(items.map(i => i.category))].length;
   const barcodes = items.filter(i => i.code).length;
 
-  // 今日のアイテムを取得して完了率を計算
-  const todayItems = await getItemsForDate(new Date());
-  const todayTotal = todayItems.length;
-  const todayChecked = todayItems.filter(i => i.checked).length;
-  const completion = todayTotal > 0 ? Math.round((todayChecked / todayTotal) * 100) : 0;
+  // 明日の日付を取得
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+
+  // 明日のアイテムを取得して完了率を計算
+  const tomorrowItems = await getItemsForDate(tomorrow);
+  const tomorrowTotal = tomorrowItems.length;
+  const tomorrowChecked = tomorrowItems.filter(i => i.checked).length;
+  const completion = tomorrowTotal > 0 ? Math.round((tomorrowChecked / tomorrowTotal) * 100) : 0;
 
   document.getElementById('stat-total').textContent = total;
   document.getElementById('stat-categories').textContent = categories;
