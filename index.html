@@ -510,6 +510,7 @@
 <script src="js/forgotten.js"></script>
 <script src="js/notifications.js"></script>
 <script>
+window.addEventListener('load', () => {
 // 詳細登録
 document.getElementById('add-detail').addEventListener('click', async () => {
   const name = document.getElementById('detail-name').value;
@@ -557,11 +558,13 @@ const checkStatusMessage = document.getElementById('check-status');
 let animationFrameId;
 let checkAnimationFrameId;
 
-const codeReader = new ZXingBrowser.BrowserMultiFormatReader();
+const codeReader = new ZXing.BrowserMultiFormatReader();
 let selectedDeviceId = undefined;
 let checkSelectedDeviceId = undefined;
+let scanControls = null;
+let checkScanControls = null;
 
-ZXingBrowser.BrowserMultiFormatReader.listVideoInputDevices()
+ZXing.BrowserMultiFormatReader.listVideoInputDevices()
   .then((videoInputDevices) => {
     if (videoInputDevices.length > 0) {
       // 複数のカメラがある場合、ここでユーザーに選択させることも可能
@@ -701,16 +704,12 @@ async function startScanning() {
     statusMessage.textContent = '🎥 カメラを起動中...';
 
     try {
-        // reset() を最初に呼んで、前の状態をクリアする
-        codeReader.reset(); 
-        console.log('startScanning: codeReader reset');
-
-        await codeReader.decodeFromVideoDevice(selectedDeviceId, 'video', (result, err) => {
+        scanControls = await codeReader.decodeFromVideoDevice(selectedDeviceId, 'video', (result, err) => {
             if (result) {
                 console.log('startScanning: barcode detected', result);
                 onDetected(result);
             }
-            if (err && !(err instanceof ZXingBrowser.NotFoundException)) {
+            if (err && !(err instanceof ZXing.NotFoundException)) {
                 console.error('startScanning: decode error', err);
                 statusMessage.textContent = `❌ エラー: ${err.message}`;
                 stopScanning();
@@ -729,11 +728,16 @@ async function startScanning() {
 
 function stopScanning() {
     console.log('stopScanning called');
+    if (scanControls) {
+        scanControls.stop();
+        scanControls = null;
+        console.log('stopScanning: scanControls.stop() called');
+    }
+    codeReader.reset(); // stop()の後でreset()を呼ぶ
+    console.log('stopScanning: codeReader reset');
+
     isScanning = false;
     console.log('stopScanning: isScanning set to false');
-
-    codeReader.reset();
-    console.log('stopScanning: codeReader reset');
     
     statusMessage.textContent = '📷 準備完了 - スキャン開始ボタンを押してください';
     scanBtn.disabled = false;
@@ -754,15 +758,12 @@ async function startCheckScanning() {
     checkStatusMessage.textContent = '🎥 カメラを起動中...';
 
     try {
-        codeReader.reset();
-        console.log('startCheckScanning: codeReader reset');
-
-        await codeReader.decodeFromVideoDevice(checkSelectedDeviceId, 'check-video', (result, err) => {
+        checkScanControls = await codeReader.decodeFromVideoDevice(checkSelectedDeviceId, 'check-video', (result, err) => {
             if (result) {
                 console.log('startCheckScanning: barcode detected', result);
                 onCheckDetected(result);
             }
-            if (err && !(err instanceof ZXingBrowser.NotFoundException)) {
+            if (err && !(err instanceof ZXing.NotFoundException)) {
                 console.error('startCheckScanning: decode error', err);
                 checkStatusMessage.textContent = `❌ エラー: ${err.message}`;
                 stopCheckScanning();
@@ -781,11 +782,16 @@ async function startCheckScanning() {
 
 function stopCheckScanning() {
     console.log('stopCheckScanning called');
+    if (checkScanControls) {
+        checkScanControls.stop();
+        checkScanControls = null;
+        console.log('stopCheckScanning: checkScanControls.stop() called');
+    }
+    codeReader.reset(); // stop()の後でreset()を呼ぶ
+    console.log('stopCheckScanning: codeReader reset');
+
     isCheckScanning = false;
     console.log('stopCheckScanning: isCheckScanning set to false');
-
-    codeReader.reset();
-    console.log('stopCheckScanning: codeReader reset');
 
     checkStatusMessage.textContent = '📷 バーコードを読み取って自動チェック';
     checkScanBtn.disabled = false;
@@ -1051,7 +1057,7 @@ window.addEventListener('beforeunload', () => {
   if (isScanning) stopScanning();
   if (isCheckScanning) stopCheckScanning();
 });
-
+});
 </script>
 </body>
 </html>
