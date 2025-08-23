@@ -43,11 +43,57 @@ jobs:
           echo "  Message: $commit_msg"
           echo "  Date: $commit_date"
 
+      - name: Get latest release tag (hex-aware)
+        id: get_latest_tag
+        run: |
+          # 16進数対応のバージョンソート関数
+          get_latest_hex_tag() {
+            local latest_tag=""
+            local latest_major=0
+            local latest_minor=0
+            local latest_patch=0
+            
+            # 全てのタグを取得してループ
+            for tag in $(git tag -l 'v[0-9a-f]*.[0-9a-f]*.[0-9a-f]*'); do
+              # vを除去
+              version=${tag#v}
+              IFS='.' read -r major minor patch <<< "$version"
+              
+              # 16進数を10進数に変換
+              major_dec=$((16#$major))
+              minor_dec=$((16#$minor))
+              patch_dec=$((16#$patch))
+              
+              echo "🔍 Checking tag: $tag (hex: $major.$minor.$patch -> dec: $major_dec.$minor_dec.$patch_dec)"
+              
+              # バージョン比較
+              if [ $major_dec -gt $latest_major ] || \
+                 ([ $major_dec -eq $latest_major ] && [ $minor_dec -gt $latest_minor ]) || \
+                 ([ $major_dec -eq $latest_major ] && [ $minor_dec -eq $latest_minor ] && [ $patch_dec -gt $latest_patch ]); then
+                latest_tag=$tag
+                latest_major=$major_dec
+                latest_minor=$minor_dec
+                latest_patch=$patch_dec
+                echo "✅ New latest: $tag"
+              fi
+            done
+            
+            echo "$latest_tag"
+          }
+          
+          latest_tag=$(get_latest_hex_tag)
+          echo "latest_tag=$latest_tag" >> $GITHUB_OUTPUT
+          
+          if [ -n "$latest_tag" ]; then
+            echo "🏷️ Latest release tag: $latest_tag"
+          else
+            echo "🏷️ No previous release found"
+          fi
+
       - name: Get commits since last release
         id: commits_since_release
         run: |
-          # 最新のリリースタグを取得
-          latest_tag=$(git tag -l 'v[0-9a-f]*.[0-9a-f]*.[0-9a-f]*' | sort -V | tail -n1)
+          latest_tag="${{ steps.get_latest_tag.outputs.latest_tag }}"
           
           if [ -z "$latest_tag" ]; then
             echo "No previous release found"
@@ -56,9 +102,15 @@ jobs:
           else
             # 最新タグから現在までのコミット数と内容を取得
             commits_count=$(git rev-list ${latest_tag}..HEAD --count)
-            commits_log=$(git log ${latest_tag}..HEAD --pretty=format:'- %s (%h) by %an' --reverse)
-            echo "📋 Commits since $latest_tag ($commits_count commits):"
-            echo "$commits_log"
+            
+            if [ $commits_count -eq 0 ]; then
+              echo "📋 No new commits since $latest_tag"
+              commits_log="No new changes"
+            else
+              commits_log=$(git log ${latest_tag}..HEAD --pretty=format:'- %s (%h) by %an' --reverse)
+              echo "📋 Commits since $latest_tag ($commits_count commits):"
+              echo "$commits_log"
+            fi
           fi
           
           echo "commits_count=$commits_count" >> $GITHUB_OUTPUT
@@ -85,7 +137,7 @@ jobs:
             echo "✅ Found version in commit message: $version"
           else
             # バージョンが見つからなかった場合、既存タグから16進数で1つ繰り上げ
-            prev="${{ steps.commits_since_release.outputs.latest_tag }}"
+            prev="${{ steps.get_latest_tag.outputs.latest_tag }}"
             if [ -z "$prev" ]; then
               new_tag="v0.0.1"
             else
@@ -97,6 +149,8 @@ jobs:
               ma_dec=$((16#$MA))
               mi_dec=$((16#$MI))
               pa_dec=$((16#$PA))
+              
+              echo "🔄 Previous version: $prev (hex: $MA.$MI.$PA -> dec: $ma_dec.$mi_dec.$pa_dec)"
               
               # パッチバージョンに1を足す
               pa_dec=$((pa_dec + 1))
@@ -120,7 +174,22 @@ jobs:
             echo "🔄 Incremented version by 1 (hex): $new_tag (from $prev)"
           fi
 
+      - name: Check if no new commits
+        id: check_commits
+        run: |
+          commits_count="${{ steps.commits_since_release.outputs.commits_count }}"
+          latest_tag="${{ steps.get_latest_tag.outputs.latest_tag }}"
+          
+          if [ -n "$latest_tag" ] && [ "$commits_count" -eq "0" ]; then
+            echo "⚠️ No new commits since $latest_tag. Skipping release."
+            echo "skip_release=true" >> $GITHUB_OUTPUT
+          else
+            echo "✅ Found $commits_count new commits. Proceeding with release."
+            echo "skip_release=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Find available tag version
+        if: steps.check_commits.outputs.skip_release == 'false'
         id: find_available_tag
         run: |
           initial_tag="${{ steps.get_version.outputs.new_tag }}"
@@ -173,6 +242,7 @@ jobs:
           exit 1
 
       - name: Verify final tag availability
+        if: steps.check_commits.outputs.skip_release == 'false' && steps.find_available_tag.outputs.found == 'true'
         id: verify_tag
         run: |
           final_tag="${{ steps.find_available_tag.outputs.available_tag }}"
@@ -189,7 +259,7 @@ jobs:
           fi
 
       - name: Create and push tag
-        if: steps.find_available_tag.outputs.found == 'true'
+        if: steps.check_commits.outputs.skip_release == 'false' && steps.find_available_tag.outputs.found == 'true'
         run: |
           new_tag="${{ steps.verify_tag.outputs.verified_tag }}"
           git config user.name "github-actions[bot]"
@@ -208,7 +278,7 @@ jobs:
           echo "✅ Successfully created and pushed tag: $new_tag"
 
       - name: Create ZIP of current commit
-        if: steps.find_available_tag.outputs.found == 'true'
+        if: steps.check_commits.outputs.skip_release == 'false' && steps.find_available_tag.outputs.found == 'true'
         id: zip
         run: |
           zipname="site-${{ steps.verify_tag.outputs.verified_tag }}.zip"
@@ -217,7 +287,7 @@ jobs:
           echo "📦 Created ZIP: $zipname"
 
       - name: Generate release notes
-        if: steps.find_available_tag.outputs.found == 'true'
+        if: steps.check_commits.outputs.skip_release == 'false' && steps.find_available_tag.outputs.found == 'true'
         id: release_notes
         run: |
           tag="${{ steps.verify_tag.outputs.verified_tag }}"
@@ -227,21 +297,21 @@ jobs:
           commit_hash="${{ steps.commit_info.outputs.commit_hash }}"
           commit_date="${{ steps.commit_info.outputs.commit_date }}"
           commits_count="${{ steps.commits_since_release.outputs.commits_count }}"
-          latest_tag="${{ steps.commits_since_release.outputs.latest_tag }}"
+          latest_tag="${{ steps.get_latest_tag.outputs.latest_tag }}"
           
           cat > release_notes.md << 'EOF'
           ## 📋 Release Information
           
-          **Version**: $tag  
-          **Release Date**: $(date '+%Y-%m-%d %H:%M:%S JST')  
-          **Commits Included**: $commits_count commits
+          **Version**: TAG_VALUE  
+          **Release Date**: DATE_VALUE  
+          **Commits Included**: COMMITS_COUNT_VALUE commits
           
           EOF
           
           # バージョン自動調整の説明
           if [ "$initial_tag" != "$tag" ]; then
             cat >> release_notes.md << 'EOF'
-          > **Note**: Originally planned as $initial_tag, but automatically adjusted to $tag due to existing tags.
+          > **Note**: Originally planned as INITIAL_TAG_VALUE, but automatically adjusted to TAG_VALUE due to existing tags.
           
           EOF
           fi
@@ -249,10 +319,10 @@ jobs:
           cat >> release_notes.md << 'EOF'
           ## 📝 Latest Commit
           
-          - **Message**: $commit_msg
-          - **Author**: $commit_author
-          - **Hash**: $commit_hash
-          - **Date**: $commit_date
+          - **Message**: COMMIT_MSG_VALUE
+          - **Author**: COMMIT_AUTHOR_VALUE
+          - **Hash**: COMMIT_HASH_VALUE
+          - **Date**: COMMIT_DATE_VALUE
           
           ## 📊 Changes Since Last Release
           
@@ -278,18 +348,18 @@ jobs:
             cat commit_body.txt >> release_notes.md
           fi
           
-          # 実際の変数を展開
-          sed -i "s/\$tag/$tag/g" release_notes.md
-          sed -i "s/\$initial_tag/$initial_tag/g" release_notes.md
-          sed -i "s/\$commit_msg/$commit_msg/g" release_notes.md
-          sed -i "s/\$commit_author/$commit_author/g" release_notes.md
-          sed -i "s/\$commit_hash/$commit_hash/g" release_notes.md
-          sed -i "s/\$commit_date/$commit_date/g" release_notes.md
-          sed -i "s/\$commits_count/$commits_count/g" release_notes.md
-          sed -i "s/\$(date '+%Y-%m-%d %H:%M:%S JST')/$(date '+%Y-%m-%d %H:%M:%S JST')/g" release_notes.md
+          # 実際の変数を展開（セキュリティのため個別に置換）
+          sed -i "s/TAG_VALUE/$tag/g" release_notes.md
+          sed -i "s/INITIAL_TAG_VALUE/$initial_tag/g" release_notes.md
+          sed -i "s/COMMIT_MSG_VALUE/$commit_msg/g" release_notes.md
+          sed -i "s/COMMIT_AUTHOR_VALUE/$commit_author/g" release_notes.md
+          sed -i "s/COMMIT_HASH_VALUE/$commit_hash/g" release_notes.md
+          sed -i "s/COMMIT_DATE_VALUE/$commit_date/g" release_notes.md
+          sed -i "s/COMMITS_COUNT_VALUE/$commits_count/g" release_notes.md
+          sed -i "s/DATE_VALUE/$(date '+%Y-%m-%d %H:%M:%S JST')/g" release_notes.md
 
       - name: Create GitHub Release
-        if: steps.find_available_tag.outputs.found == 'true'
+        if: steps.check_commits.outputs.skip_release == 'false' && steps.find_available_tag.outputs.found == 'true'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.verify_tag.outputs.verified_tag }}
