@@ -5,9 +5,15 @@
   <meta name="viewport" content="width=device-width,initial-scale=1.0">
   <title>Quagga vs Quagga2 vs ZXing ベンチマーク</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- Quagga1, Quagga2 -->
-  <script src="https://unpkg.com/quagga@latest/dist/quagga.min.js"></script>
+  <!-- Quagga2（先に読んでwindow.Quagga2に退避） -->
   <script src="https://unpkg.com/@ericblade/quagga2@latest/dist/quagga.min.js"></script>
+  <script>
+    // Quagga2をwindow.Quagga2に待避させる！
+    window.Quagga2 = window.Quagga;
+    window.Quagga = undefined;
+  </script>
+  <!-- 次にQuagga1 -->
+  <script src="https://unpkg.com/quagga@latest/dist/quagga.min.js"></script>
   <!-- ZXing -->
   <script src="https://unpkg.com/@zxing/library@latest"></script>
   <style>
@@ -34,7 +40,7 @@
 <body class="bg-gray-100 min-h-screen py-8">
   <div class="container mx-auto px-4 max-w-4xl">
     <h1 class="text-3xl font-bold text-center text-gray-800 mb-8">Quagga vs Quagga2 vs ZXing ベンチマーク</h1>
-    <!-- UIコンパネ -->
+    <!-- 設定パネル -->
     <div class="bg-white rounded-lg shadow-lg p-6 mb-6">
       <h2 class="text-xl font-semibold mb-4">設定</h2>
       <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
@@ -139,7 +145,7 @@
     </div>
   </div>
   <script>
-    // 共通
+    // --- 共通変数 ---
     const $ = sel => document.querySelector(sel);
     const $resultsTableBody = $("#resultsTableBody");
     const $result = $("#result");
@@ -231,9 +237,7 @@
           showPlaceholder(true,true);
         }
       } else if(currentLibrary==="quagga2") {
-        try {
-          window.Quagga2.stop(); window.Quagga2.reset();
-        }catch(e){}
+        try { window.Quagga2.stop(); window.Quagga2.reset(); }catch(e){}
         clearQuagga2Dom();
         const $interactive = $("#interactive");
         const constraints = {
