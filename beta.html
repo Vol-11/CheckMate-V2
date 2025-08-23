@@ -1,152 +1,337 @@
 <!doctype html>
-<html>
+<html lang="ja">
 <head>
   <meta charset="utf-8" />
-  <title>Scanner Benchmark</title>
+  <title>Barcode Scanner Benchmark (Quagga / Quagga2 / ZXing)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
-    body { font-family: system-ui, sans-serif; }
-    #video { width: 360px; height: 240px; background: #000; }
-    #log { white-space: pre-wrap; font-family: ui-monospace, monospace; }
+    :root {
+      color-scheme: light dark;
+    }
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Noto Sans JP, sans-serif; margin: 16px; }
+    h1 { font-size: 20px; margin: 0 0 12px; }
+    .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin-bottom: 8px; }
+    label { display: inline-flex; align-items: center; gap: 6px; }
+    select, button { font: inherit; padding: 6px 8px; }
+    button { cursor: pointer; }
+    #video { width: min(480px, 90vw); aspect-ratio: 3 / 2; background: #000; border-radius: 8px; display: block; }
+    #log { margin-top: 8px; padding: 8px; border: 1px solid #8884; border-radius: 8px; white-space: pre-wrap; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; min-height: 100px; }
+    .note { font-size: 12px; color: #888; }
+    .pill { padding: 2px 6px; border-radius: 999px; background: #8882; font-size: 11px; }
+    .grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
+    @media (min-width: 980px) {
+      .grid { grid-template-columns: 520px 1fr; align-items: start; }
+    }
+    .kbd { font-family: ui-monospace, monospace; background: #8882; padding: 1px 5px; border-radius: 4px; }
+    .warn { color: #b35300; }
+    .ok { color: #0a7a3c; }
+    .err { color: #b00020; }
   </style>
 </head>
 <body>
   <h1>Barcode Scanner Benchmark</h1>
+  <div class="row">
+    <label>ライブラリ:
+      <select id="lib">
+        <option value="quagga">Quagga (serratus/quaggaJS)</option>
+        <option value="quagga2">Quagga2 (@ericblade/quagga2)</option>
+        <option value="zxing">ZXing (@zxing/library)</option>
+      </select>
+    </label>
 
-  <label>
-    ライブラリ:
-    <select id="lib">
-      <option value="quagga">Quagga</option>
-      <option value="quagga2">Quagga2</option>
-      <option value="zxing">ZXing (@zxing/library)</option>
-      <!-- <option value="zxing-wasm">ZXing WASM</option> -->
-    </select>
-  </label>
+    <label>カメラ:
+      <select id="device"></select>
+    </label>
 
-  <label>
-    カメラ: <select id="device"></select>
-  </label>
+    <label>解像度プリセット:
+      <select id="preset">
+        <option value="720p">1280x720</option>
+        <option value="540p">960x540</option>
+        <option value="480p">854x480</option>
+        <option value="1080p">1920x1080</option>
+      </select>
+    </label>
 
-  <div>
+    <span class="pill">EAN-13/ISBN 用に最適化</span>
+  </div>
+
+  <div class="row">
     <button id="btnInit">カメラ起動</button>
     <button id="btnStart">認識開始</button>
     <button id="btnStop">停止</button>
     <button id="btnTeardown">解放</button>
+    <button id="btnExport">CSV出力</button>
   </div>
 
-  <video id="video" playsinline muted></video>
-  <div id="log"></div>
+  <div class="note">
+    計測: 起動時間（カメラ起動クリック→ライブラリ初期化完了）と、認識開始→最初のバーコード検出までの時間を記録します。<br />
+    注: 教科書ISBNは多くが EAN-13（978/979 プレフィックス）です。ZXing は EAN-13 のみに絞って高速化しています。
+  </div>
 
-  <!-- libs -->
-  <script src="https://unpkg.com/quagga/dist/quagga.min.js"></script>
-  <script src="https://unpkg.com/@ericblade/quagga2/dist/quagga.min.js"></script>
-  <script src="https://unpkg.com/@zxing/library@latest"></script>
+  <div class="grid">
+    <div>
+      <video id="video" playsinline muted></video>
+      <div id="log"></div>
+      <div class="note">
+        トラブルシュート:
+        <ul>
+          <li>HTTPS で配信してください（カメラはセキュアコンテキストが必要）。</li>
+          <li>iOS Safari ではユーザ操作後のみ再生可能。ボタンから開始してください。</li>
+          <li>他タブや他アプリがカメラを使用中だと取得に失敗します。</li>
+        </ul>
+      </div>
+    </div>
+    <div>
+      <h3 style="margin:8px 0">このページの目的と設計</h3>
+      <p>
+        1つのHTML内で Quagga / Quagga2 / ZXing を切替え、(1)カメラ初期化の起動時間 と (2)「認識開始」→最初の検出までの時間 を比較計測します。
+        グローバル衝突による <span class="kbd">TypeError: Ut[e] is not a constructor</span> を回避するため、各ライブラリを固定バージョンで読み込み、直後に退避し、グローバル名を消去して安全に切替できるようにしています。
+      </p>
+      <h4 style="margin:8px 0">エラー修正の要点</h4>
+      <ul>
+        <li>Quagga と Quagga2 は同じグローバル名 <span class="kbd">Quagga</span> を用いるビルドがあるため、読み込み直後に別名へ退避して衝突を回避。</li>
+        <li>固定バージョン（Quagga 0.12.1 / Quagga2 1.7.2 / ZXing 0.20.0）を使用してミニファイ差異の影響を排除。</li>
+        <li>アダプタは退避した参照（<span class="kbd">__Quagga_v0121__</span> / <span class="kbd">__Quagga2_v172__</span>）のみを使用。</li>
+      </ul>
+      <h4 style="margin:8px 0">ZXing 高速化の要点</h4>
+      <ul>
+        <li>DecodeHintType.POSSIBLE_FORMATS = [ EAN_13 ] に限定。</li>
+        <li>解像度を 720p などに制限して総ピクセル数を抑制。</li>
+        <li>最初のヒットで停止（連続処理を避ける）。</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ライブラリを固定バージョンで読み込みし、直後に退避して衝突回避 -->
+  <!-- Quagga (serratus/quaggaJS) -->
+  <script src="https://unpkg.com/quagga@0.12.1/dist/quagga.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script>
+    // 退避: Quagga v0.12.1 を __Quagga_v0121__ に保存
+    window.__Quagga_v0121__ = window.Quagga;
+  </script>
+
+  <!-- Quagga2 (@ericblade/quagga2) -->
+  <script src="https://unpkg.com/@ericblade/quagga2@1.7.2/dist/quagga.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script>
+    // 退避: Quagga2 のグローバル（Quagga）を __Quagga2_v172__ に保存
+    window.__Quagga2_v172__ = window.Quagga;
+    // 衝突防止: グローバル Quagga を消して、以降は退避名のみ参照
+    try { delete window.Quagga; } catch (e) { window.Quagga = undefined; }
+  </script>
+
+  <!-- ZXing (@zxing/library) -->
+  <script src="https://unpkg.com/@zxing/library@0.20.0" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 
   <script>
+    // ユーティリティ
     const $ = (s)=>document.querySelector(s);
-    const log = (...a)=>{ const L=$("#log"); L.textContent += a.join(" ") + "\n"; };
     const video = $("#video");
     const selLib = $("#lib");
     const selDev = $("#device");
+    const selPreset = $("#preset");
+    const logView = $("#log");
 
+    const log = (...a) => {
+      const line = a.map(v => {
+        if (v instanceof Error) return `${v.name}: ${v.message}`;
+        if (typeof v === 'object') try { return JSON.stringify(v); } catch { return String(v); }
+        return String(v);
+      }).join(" ");
+      logView.textContent += line + "\n";
+      logView.scrollTop = logView.scrollHeight;
+      console.log("[LOG]", ...a);
+    };
+
+    const warn = (...a)=>log("⚠️", ...a);
+    const ok = (...a)=>log("✅", ...a);
+    const err = (...a)=>log("❌", ...a);
+
+    // 計測・結果保存
     let adapter = null;
     let stream = null;
     let t0=0, t1=0, s0=0, s1=0;
+    const results = []; // { ts, lib, deviceLabel, preset, init_ms, detect_ms, text, format }
 
+    function recordResult(meta) {
+      results.push({
+        ts: new Date().toISOString(),
+        ...meta
+      });
+    }
+
+    function exportCSV() {
+      if (!results.length) {
+        warn("出力可能な結果がありません。少なくとも1回スキャンしてください。");
+        return;
+      }
+      const header = [
+        "timestamp","library","device","preset","init_ms","detect_ms","text","format"
+      ];
+      const rows = results.map(r => ([
+        r.ts,
+        r.lib,
+        r.deviceLabel ?? "",
+        r.preset ?? "",
+        r.init_ms ?? "",
+        r.detect_ms ?? "",
+        r.text ?? "",
+        r.format ?? ""
+      ].map(v => {
+        const s = (v == null) ? "" : String(v);
+        return /[",\n]/.test(s) ? `"${s.replace(/"/g,'""')}"` : s;
+      }).join(",")));
+      const csv = [header.join(","), ...rows].join("\n");
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `barcode_benchmark_${new Date().toISOString().replace(/[:.]/g,'-')}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      ok("CSV をダウンロードしました。");
+    }
+
+    // デバイス列挙
     async function listDevices() {
       const devices = await navigator.mediaDevices.enumerateDevices();
-      const vids = devices.filter(d=>d.kind==="videoinput");
+      const vids = devices.filter(d=>d.kind === "videoinput");
       selDev.innerHTML = "";
       for (const d of vids) {
         const opt = document.createElement("option");
         opt.value = d.deviceId;
-        opt.textContent = d.label || d.deviceId;
+        opt.textContent = d.label || d.deviceId || "camera";
         selDev.appendChild(opt);
       }
-      if (!vids.length) log("カメラが見つかりません");
+      if (!vids.length) warn("カメラが見つかりません。権限や接続を確認してください。");
     }
 
+    // 解像度プリセット → constraints 合成
     function getConstraints() {
       const deviceId = selDev.value || undefined;
+      const preset = selPreset.value;
+      const sizeMap = {
+        "540p": { width: 960, height: 540 },
+        "480p": { width: 854, height: 480 },
+        "720p": { width: 1280, height: 720 },
+        "1080p": { width: 1920, height: 1080 },
+      };
+      const wh = sizeMap[preset] || sizeMap["720p"];
+      const baseVideo = deviceId
+        ? { deviceId: { exact: deviceId } }
+        : { facingMode: "environment" };
+      // 既存の baseVideo を壊さないようにオブジェクト合成
+      const videoConstraint = Object.assign({}, baseVideo, {
+        width: { ideal: wh.width },
+        height: { ideal: wh.height },
+        frameRate: { ideal: 30 }
+      });
       return {
         audio: false,
-        video: deviceId ? { deviceId: { exact: deviceId } } : { facingMode: "environment" }
+        video: videoConstraint
       };
     }
 
-    // Adapters
+    // アダプタ（各ライブラリを同じ操作系に正規化）
     const Adapters = {
       quagga: {
+        Q: window.__Quagga_v0121__,
         async init(videoEl, constraints) {
           t0 = performance.now();
-          // 先にストリーム確保して video に表示
+          // 先にユーザメディアを確保してプレビューに載せる（プレビューとQuaggaのLiveStreamを一致させる）
           stream = await navigator.mediaDevices.getUserMedia(constraints);
-          videoEl.srcObject = stream; await videoEl.play();
+          videoEl.srcObject = stream;
+          await videoEl.play();
 
-          // Quagga init
-          await new Promise((res, rej)=>{
-            Quagga.init({
-              inputStream: {
-                name: "Live",
-                type: "LiveStream",
-                target: videoEl,
-                constraints: constraints.video
-              },
-              decoder: { readers: ["ean_reader","code_128_reader","code_39_reader","ean_8_reader","upc_reader","itf_reader","codabar_reader","qr_reader"] },
-              locate: true
-            }, (err)=> err ? rej(err) : res());
+          await new Promise((res, rej) => {
+            try {
+              this.Q.init({
+                inputStream: {
+                  name: "Live",
+                  type: "LiveStream",
+                  target: videoEl,
+                  constraints: constraints.video
+                },
+                // EAN のみに絞る（高速化・誤検出抑制）
+                decoder: { readers: ["ean_reader"] },
+                locate: true
+              }, (err) => err ? rej(err) : res());
+            } catch (e) {
+              rej(e);
+            }
           });
           t1 = performance.now();
         },
         async startScan(onResult) {
+          // quagga 0.12系は offDetected が存在しないビルドがあるため、開始前に stop を呼びハンドラ多重を避ける
+          try { this.Q.stop(); } catch {}
           s0 = performance.now();
-          Quagga.offDetected(); // 念のため
-          Quagga.onDetected((res)=>{
+          this.Q.onDetected((res) => {
             if (!res || !res.codeResult) return;
             s1 = performance.now();
             onResult({ text: res.codeResult.code, format: res.codeResult.format });
+            // 今回は最初のヒットで停止（ベンチのため）
+            try { this.Q.stop(); } catch {}
           });
-          Quagga.start();
+          this.Q.start();
         },
-        async stopScan() { Quagga.stop(); },
+        async stopScan() {
+          try { this.Q.stop(); } catch {}
+        },
         async teardown() {
-          try { Quagga.stop(); } catch {}
-          if (stream) { stream.getTracks().forEach(t=>t.stop()); stream=null; }
+          try { this.Q.stop(); } catch {}
+          if (stream) {
+            stream.getTracks().forEach(t => t.stop());
+            stream = null;
+          }
           video.srcObject = null;
         }
       },
       quagga2: {
+        Q2: window.__Quagga2_v172__,
         async init(videoEl, constraints) {
           t0 = performance.now();
           stream = await navigator.mediaDevices.getUserMedia(constraints);
-          videoEl.srcObject = stream; await videoEl.play();
-          await new Promise((res, rej)=>{
-            window.Quagga2.init({
-              inputStream: {
-                name: "Live",
-                type: "LiveStream",
+          videoEl.srcObject = stream;
+          await videoEl.play();
+          await new Promise((res, rej) => {
+            try {
+              this.Q2.init({
+                inputStream: {
+                  name: "Live",
+                  type: "LiveStream",
                 target: videoEl,
-                constraints: constraints.video
-              },
-              decoder: { readers: ["ean_reader","code_128_reader","code_39_reader","ean_8_reader","upc_reader","itf_reader","codabar_reader","qr_reader"] },
-              locate: true
-            }, (err)=> err ? rej(err) : res());
+                  constraints: constraints.video
+                },
+                decoder: { readers: ["ean_reader"] },
+                locate: true
+              }, (err) => err ? rej(err) : res());
+            } catch (e) {
+              rej(e);
+            }
           });
           t1 = performance.now();
         },
         async startScan(onResult) {
           s0 = performance.now();
-          window.Quagga2.offDetected();
-          window.Quagga2.onDetected((res)=>{
+          // Quagga2 には offDetected があるビルドが多いが存在しない場合もあるので try
+          try { this.Q2.offDetected && this.Q2.offDetected(); } catch {}
+          this.Q2.onDetected((res) => {
             if (!res || !res.codeResult) return;
             s1 = performance.now();
             onResult({ text: res.codeResult.code, format: res.codeResult.format });
+            try { this.Q2.stop(); } catch {}
           });
-          window.Quagga2.start();
+          this.Q2.start();
         },
-        async stopScan() { window.Quagga2.stop(); },
+        async stopScan() {
+          try { this.Q2.stop(); } catch {}
+        },
         async teardown() {
-          try { window.Quagga2.stop(); } catch {}
-          if (stream) { stream.getTracks().forEach(t=>t.stop()); stream=null; }
+          try { this.Q2.stop(); } catch {}
+          if (stream) {
+            stream.getTracks().forEach(t => t.stop());
+            stream = null;
+          }
           video.srcObject = null;
         }
       },
@@ -155,22 +340,41 @@
         _running: false,
         async init(videoEl, constraints) {
           t0 = performance.now();
-          stream = await navigator.mediaDevices.getUserMedia(constraints);
-          videoEl.srcObject = stream; await videoEl.play();
-          // ZXing reader
-          this._reader = new ZXing.BrowserMultiFormatReader();
+          // チューニング: 解像度（presetで選択）・30fps ideal
+          const tuned = JSON.parse(JSON.stringify(constraints));
+          tuned.video = tuned.video || {};
+          if (typeof tuned.video === "object") {
+            // すでに deviceId/facingMode が設定済みなら維持しつつサイズ・fps を追加
+            if (!('width' in tuned.video)) tuned.video.width = { ideal: 1280 };
+            if (!('height' in tuned.video)) tuned.video.height = { ideal: 720 };
+            if (!('frameRate' in tuned.video)) tuned.video.frameRate = { ideal: 30 };
+          }
+          stream = await navigator.mediaDevices.getUserMedia(tuned);
+          videoEl.srcObject = stream;
+          await videoEl.play();
+
+          // ZXing ヒント: EAN_13 のみに絞る（ISBN 向け）
+          const hints = new Map();
+          hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.EAN_13]);
+          // 高速化のため TRY_HARDER は付与しない（必要に応じて切替）
+          // hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+
+          this._reader = new ZXing.BrowserMultiFormatReader(hints);
           t1 = performance.now();
         },
         async startScan(onResult) {
           if (this._running) return;
           this._running = true;
           s0 = performance.now();
-          // decodeFromVideoElementContinuously は最初のヒットで s1 記録して停止
           this._reader.decodeFromVideoElementContinuously(video, (result, err) => {
+            // err は NotFound など通常動作の一部なのでログしない
             if (result) {
+              const txt = result.getText();
+              // さらに ISBN プレフィックスでフィルタしたい場合（速度への影響は小さいが誤検出防止に有効）
+              // if (!/^97[89]/.test(txt)) return;
               if (!s1) s1 = performance.now();
-              onResult({ text: result.getText(), format: result.getBarcodeFormat() });
-              // 1回で止める（比較用）
+              onResult({ text: txt, format: result.getBarcodeFormat() });
+              // 最初のヒットで停止
               this._reader.reset();
               this._running = false;
             }
@@ -182,12 +386,14 @@
         },
         async teardown() {
           await this.stopScan();
-          if (stream) { stream.getTracks().forEach(t=>t.stop()); stream=null; }
+          if (stream) {
+            stream.getTracks().forEach(t => t.stop());
+            stream = null;
+          }
           video.srcObject = null;
           this._reader = null;
         }
-      },
-      // zxing-wasm を使う場合は、WASM/worker のパス設定と init/scan 実装を追加
+      }
     };
 
     async function ensureAdapter() {
@@ -204,46 +410,119 @@
       }
     }
 
-    $("#btnInit").onclick = async ()=>{
+    // イベント
+    $("#btnInit").onclick = async () => {
       try {
         if (adapter) await adapter.teardown();
         adapter = await ensureAdapter();
-        await adapter.init(video, getConstraints());
-        log(`[${selLib.value}] カメラ起動完了`);
+        const constraints = getConstraints();
+        t0 = 0; t1 = 0; s0 = 0; s1 = 0;
+        await adapter.init(video, constraints);
+        const devLabel = selDev.selectedOptions[0]?.textContent || "";
+        const preset = selPreset.value;
+        ok(`[${selLib.value}] カメラ起動完了  device="${devLabel}" preset=${preset}`);
         printTimes();
-      } catch (e) {
-        log("init error:", e);
-      }
-    };
 
-    $("#btnStart").onclick = async ()=>{
-      try {
-        s0 = 0; s1 = 0;
-        await adapter?.startScan((res)=>{
-          log(`検出: ${res.text} (${res.format})`);
-          printTimes();
+        // 起動結果も記録（検出時間は未定のため空）
+        recordResult({
+          lib: selLib.value,
+          deviceLabel: devLabel,
+          preset,
+          init_ms: (t1 && t0) ? (t1 - t0).toFixed(1) : "",
+          detect_ms: "",
+          text: "",
+          format: ""
         });
       } catch (e) {
-        log("start error:", e);
+        err("init error:", e);
       }
     };
 
-    $("#btnStop").onclick = async ()=>{
-      try { await adapter?.stopScan(); log("停止"); } catch(e){ log("stop error:", e); }
-    };
-
-    $("#btnTeardown").onclick = async ()=>{
-      try { await adapter?.teardown(); log("解放"); } catch(e){ log("teardown error:", e); }
-    };
-
-    // 初期化: カメラ一覧更新
-    (async ()=>{
+    $("#btnStart").onclick = async () => {
       try {
-        // 一度権限を取らないと label が空のことがある
-        await navigator.mediaDevices.getUserMedia({ video: true, audio: false }).then(s=>s.getTracks().forEach(t=>t.stop()));
-      } catch {}
-      await listDevices();
+        if (!adapter) {
+          warn("先に「カメラ起動」を実行してください。");
+          return;
+        }
+        s0 = 0; s1 = 0;
+        const devLabel = selDev.selectedOptions[0]?.textContent || "";
+        const preset = selPreset.value;
+        await adapter.startScan((res) => {
+          ok(`検出: ${res.text} (${res.format})`);
+          printTimes();
+          recordResult({
+            lib: selLib.value,
+            deviceLabel: devLabel,
+            preset,
+            init_ms: (t1 && t0) ? (t1 - t0).toFixed(1) : "",
+            detect_ms: (s1 && s0) ? (s1 - s0).toFixed(1) : "",
+            text: res.text,
+            format: res.format
+          });
+        });
+      } catch (e) {
+        err("start error:", e);
+      }
+    };
+
+    $("#btnStop").onclick = async () => {
+      try {
+        await adapter?.stopScan();
+        ok("停止しました。");
+      } catch (e) {
+        err("stop error:", e);
+      }
+    };
+
+    $("#btnTeardown").onclick = async () => {
+      try {
+        await adapter?.teardown();
+        adapter = null;
+        ok("解放しました。");
+      } catch (e) {
+        err("teardown error:", e);
+      }
+    };
+
+    $("#btnExport").onclick = exportCSV;
+
+    // 初期セットアップ: カメラ一覧（ラベル取得のため初回のみ一時的に権限付与を試みる）
+    (async () => {
+      try {
+        // ラベルを取得するには一度許可が必要なことがある
+        const tmp = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        tmp.getTracks().forEach(t => t.stop());
+      } catch (e) {
+        warn("カメラ権限の事前取得に失敗しました（後続で再試行します）。", e);
+      }
+      try {
+        await listDevices();
+        ok("カメラ一覧を取得しました。");
+      } catch (e) {
+        err("カメラ一覧の取得に失敗しました。", e);
+      }
     })();
+
+    // 追加のヒント・解説（コメント）
+    /*
+      — エラー "TypeError: Ut[e] is not a constructor" について —
+      主因は Quagga と Quagga2 が同じグローバル名 Quagga を用いるビルドを同時に読み込んだ場合に
+      片方の内部参照が上書きされ、ミニファイされた内部クラス（Ut など）の解決に失敗する事象です。
+      対策として、本HTMLでは以下を行っています。
+        1) バージョン固定で読み込み（挙動差の吸収）
+        2) 読み込み直後に退避（__Quagga_v0121__ / __Quagga2_v172__）
+        3) グローバル window.Quagga を削除し、以降は退避名のみ参照
+
+      — ZXing 高速化（EAN-13/ISBN に限定） —
+      @zxing/library の BrowserMultiFormatReader は複数フォーマットに対応できますが、
+      DecodeHintType.POSSIBLE_FORMATS に EAN_13 だけを指定することで、探索範囲を狭めて高速化できます。
+      また、TRY_HARDER ヒントは難しいケースの探索を増やしますが、速度低下につながるためデフォルトでは付けません。
+      明るい環境・適切な距離（15〜25cm）・720p 程度の解像度が安定しやすいです。
+
+      — ベンチマーク指針 —
+      ライブラリごとの差が小さい場合、照明・ピント・手ブレがボトルネックになりがちです。
+      比較の際は同じ端末・同じカメラ・同じ解像度・同じバーコードで、起動→検出を数回ずつ計測して平均化してください。
+    */
   </script>
 </body>
 </html>
