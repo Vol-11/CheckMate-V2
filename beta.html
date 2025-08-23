@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="utf-8" />
-  <title>Barcode Scanner Benchmark - 最新安定版</title>
+  <title>Barcode Scanner Benchmark - 完全修正版</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
     :root { color-scheme: light dark; }
@@ -18,10 +18,11 @@
     #log { margin-top: 8px; padding: 8px; border: 1px solid #ddd; border-radius: 8px; white-space: pre-wrap; font-family: 'Courier New', monospace; min-height: 120px; max-height: 300px; overflow-y: auto; background: #f8f9fa; }
     .note { font-size: 12px; color: #666; margin: 8px 0; }
     .pill { padding: 2px 6px; border-radius: 12px; background: #e9ecef; font-size: 11px; }
-    .status { padding: 4px 8px; border-radius: 4px; font-weight: bold; }
+    .status { padding: 4px 8px; border-radius: 4px; font-weight: bold; margin: 8px 0; }
     .status.ok { background: #d4edda; color: #155724; }
     .status.warn { background: #fff3cd; color: #856404; }
     .status.error { background: #f8d7da; color: #721c24; }
+    .loading { background: #cce5ff; color: #004085; }
   </style>
 </head>
 <body>
@@ -30,7 +31,7 @@
   <div class="row">
     <label>ライブラリ:
       <select id="lib">
-        <option value="zxing">ZXing (最新・推奨)</option>
+        <option value="zxing" selected>ZXing (最新・推奨・高速)</option>
         <option value="quagga2">Quagga2 (安定版)</option>
       </select>
     </label>
@@ -47,7 +48,7 @@
       </select>
     </label>
 
-    <span class="pill">📚 教科書ISBN（EAN-13）最適化</span>
+    <span class="pill">📚 教科書ISBN（EAN-13）最適化済み</span>
   </div>
 
   <div class="row">
@@ -58,7 +59,7 @@
     <button id="btnExport" disabled>📄 CSV出力</button>
   </div>
 
-  <div id="status" class="status">ライブラリ読み込み中...</div>
+  <div id="status" class="status loading">ライブラリ読み込み中...</div>
 
   <video id="video" playsinline muted></video>
   
@@ -66,14 +67,15 @@
     📊 <strong>計測項目:</strong><br>
     • 起動時間: カメラ初期化完了までの時間<br>
     • 認識時間: 「認識開始」→最初の検出までの時間<br>
-    📖 <strong>対象:</strong> 教科書によくあるISBN（EAN-13、978/979で始まる13桁バーコード）
+    📖 <strong>対象:</strong> 教科書によくあるISBN（EAN-13、978/979で始まる13桁バーコード）<br>
+    💡 <strong>推奨:</strong> ZXing が最も高速・安定です
   </div>
 
   <div id="log"></div>
 
-  <!-- 正しい最新CDN -->
-  <script src="https://unpkg.com/@zxing/library@latest"></script>
-  <script src="https://unpkg.com/@ericblade/quagga2@1.7.7/dist/quagga.min.js"></script>
+  <!-- 正しいCDNパス（最新版） -->
+  <script src="https://unpkg.com/@zxing/library@latest/umd/index.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.8.4/dist/quagga.min.js"></script>
 
   <script>
     // === ユーティリティ ===
@@ -100,9 +102,13 @@
         quagga2: typeof window.Quagga2 !== 'undefined'
       };
       
-      log(`📚 ライブラリ状況:`);
-      log(`  ZXing: ${status.zxing ? '✅ 利用可能' : '❌ 読み込み失敗'}`);
-      log(`  Quagga2: ${status.quagga2 ? '✅ 利用可能' : '❌ 読み込み失敗'}`);
+      log(`📚 ライブラリ読み込み状況:`);
+      log(`  ✅ ZXing: ${status.zxing ? '利用可能' : '❌ 読み込み失敗'}`);
+      log(`  ${status.quagga2 ? '✅' : '❌'} Quagga2: ${status.quagga2 ? '利用可能' : '読み込み失敗'}`);
+      
+      if (status.zxing) {
+        log(`🎯 ZXing推奨: 最高速・最安定のバーコードスキャナー`);
+      }
       
       return status;
     }
@@ -158,6 +164,8 @@
         
         if (cameras.length === 0) {
           log("⚠️ カメラが見つかりません");
+        } else {
+          log(`📷 ${cameras.length}台のカメラを検出しました`);
         }
       } catch (error) {
         log("⚠️ カメラアクセス権限が必要です:", error.message);
@@ -188,6 +196,22 @@
       };
     }
 
+    // video再生の安全実行（重複再生エラー防止）
+    async function safePlayVideo(videoElement) {
+      try {
+        if (videoElement.readyState >= 2) { // HAVE_CURRENT_DATA 以上
+          if (!videoElement.paused) {
+            return; // 既に再生中
+          }
+        }
+        await videoElement.play();
+      } catch (error) {
+        if (error.name !== 'AbortError') { // 既に再生中エラー以外
+          throw error;
+        }
+      }
+    }
+
     // === アダプター実装 ===
     const adapters = {
       // ZXing - 最も安定で高速
@@ -205,17 +229,17 @@
           const constraints = getMediaConstraints();
           currentStream = await navigator.mediaDevices.getUserMedia(constraints);
           video.srcObject = currentStream;
-          await video.play();
+          await safePlayVideo(video);
           
           // EAN-13専用設定で高速化
           const hints = new Map();
           hints.set(window.ZXing.DecodeHintType.POSSIBLE_FORMATS, [window.ZXing.BarcodeFormat.EAN_13]);
-          hints.set(window.ZXing.DecodeHintType.TRY_HARDER, false); // 高速化優先
+          hints.set(window.ZXing.DecodeHintType.TRY_HARDER, false); // 高速優先
           
           this.reader = new window.ZXing.BrowserMultiFormatReader(hints);
           
           t1 = performance.now();
-          log(`✅ ZXing 初期化完了 (${(t1-t0).toFixed(1)}ms)`);
+          log(`✅ ZXing 初期化完了 (${(t1-t0).toFixed(1)}ms) - EAN-13特化モード`);
         },
         
         async startScan(onDetected) {
@@ -231,8 +255,11 @@
                 const text = result.getText();
                 const format = result.getBarcodeFormat();
                 
-                log(`🎯 バーコード検出: ${text}`);
-                onDetected({ text, format });
+                // ISBN判定（978/979で始まる13桁）
+                const isISBN = /^97[89]\d{10}$/.test(text);
+                log(`🎯 検出: ${text} ${isISBN ? '📚(ISBN)' : '📦(一般EAN)'}`);
+                
+                onDetected({ text, format, isISBN });
                 this.stopScan();
               }
             });
@@ -275,9 +302,9 @@
           const constraints = getMediaConstraints();
           currentStream = await navigator.mediaDevices.getUserMedia(constraints);
           video.srcObject = currentStream;
-          await video.play();
+          await safePlayVideo(video);
           
-          // video要素の準備完了を待つ
+          // video要素の準備完了を確実に待つ
           await new Promise(resolve => setTimeout(resolve, 500));
           
           await new Promise((resolve, reject) => {
@@ -286,7 +313,8 @@
                 name: "Live",
                 type: "LiveStream",
                 target: video,
-                constraints: constraints.video
+                constraints: constraints.video,
+                willReadFrequently: true // Canvas最適化
               },
               decoder: {
                 readers: ["ean_reader"] // EAN-13のみ
@@ -294,9 +322,10 @@
               locate: true,
               locator: {
                 patchSize: "medium",
-                halfSample: false // 精度優先
+                halfSample: false, // 精度優先
+                willReadFrequently: true
               },
-              numOfWorkers: navigator.hardwareConcurrency ? Math.min(4, navigator.hardwareConcurrency) : 2
+              numOfWorkers: Math.min(4, navigator.hardwareConcurrency || 2)
             }, (err) => {
               if (err) {
                 reject(new Error(`Quagga2 初期化エラー: ${err.message || err}`));
@@ -308,7 +337,7 @@
           });
           
           t1 = performance.now();
-          log(`✅ Quagga2 初期化完了 (${(t1-t0).toFixed(1)}ms)`);
+          log(`✅ Quagga2 初期化完了 (${(t1-t0).toFixed(1)}ms) - EAN特化モード`);
         },
         
         async startScan(onDetected) {
@@ -326,8 +355,10 @@
               const text = result.codeResult.code;
               const format = result.codeResult.format;
               
-              log(`🎯 バーコード検出: ${text}`);
-              onDetected({ text, format });
+              const isISBN = /^97[89]\d{10}$/.test(text);
+              log(`🎯 検出: ${text} ${isISBN ? '📚(ISBN)' : '📦(一般EAN)'}`);
+              
+              onDetected({ text, format, isISBN });
               this.stopScan();
             }
           });
@@ -337,8 +368,12 @@
         
         async stopScan() {
           if (this.initialized) {
-            window.Quagga2.stop();
-            window.Quagga2.offDetected();
+            try {
+              window.Quagga2.stop();
+              window.Quagga2.offDetected();
+            } catch (e) {
+              // 既に停止済みの場合は無視
+            }
           }
           this.scanning = false;
         },
@@ -365,7 +400,11 @@
     // === メイン処理 ===
     function getSelectedAdapter() {
       const libName = $("#lib").value;
-      return adapters[libName] || adapters.zxing;
+      const adapter = adapters[libName];
+      if (!adapter) {
+        throw new Error(`未対応のライブラリ: ${libName}`);
+      }
+      return adapter;
     }
 
     function recordMeasurement(data) {
@@ -382,9 +421,12 @@
 
     // CSV エクスポート
     function exportResults() {
-      if (results.length === 0) return;
+      if (results.length === 0) {
+        log("⚠️ 出力可能な結果がありません");
+        return;
+      }
       
-      const headers = ["timestamp", "library", "device", "preset", "init_time_ms", "scan_time_ms", "detected_text", "format"];
+      const headers = ["timestamp", "library", "device", "preset", "init_time_ms", "scan_time_ms", "detected_text", "format", "is_isbn"];
       const csv = [
         headers.join(","),
         ...results.map(r => [
@@ -395,11 +437,12 @@
           r.init_time_ms || "",
           r.scan_time_ms || "",
           `"${r.detected_text || ""}"`,
-          r.format || ""
+          r.format || "",
+          r.is_isbn || false
         ].join(","))
       ].join("\n");
       
-      const blob = new Blob([csv], { type: "text/csv" });
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -407,7 +450,7 @@
       a.click();
       URL.revokeObjectURL(url);
       
-      log("📄 結果をCSVでダウンロードしました");
+      log(`📄 ${results.length}件の結果をCSVでエクスポートしました`);
     }
 
     // === イベントハンドラー ===
@@ -425,19 +468,21 @@
         
         await currentAdapter.init();
         
-        setStatus(`${$("#lib").value} カメラ準備完了`, "ok");
+        const libName = $("#lib").value;
+        setStatus(`${libName} カメラ準備完了 - 認識開始ボタンを押してください`, "ok");
         updateButtons("ready");
         
         recordMeasurement({
           init_time_ms: (t1 - t0).toFixed(1),
           scan_time_ms: "",
           detected_text: "",
-          format: ""
+          format: "",
+          is_isbn: false
         });
         
       } catch (error) {
         log("❌ 初期化エラー:", error.message);
-        setStatus("初期化失敗", "error");
+        setStatus("初期化失敗 - 別のライブラリを試してください", "error");
         updateButtons("idle");
       }
     };
@@ -446,23 +491,24 @@
       if (!currentAdapter) return;
       
       try {
-        setStatus("スキャン中... バーコードをカメラに向けてください", "warn");
+        setStatus("📱 スキャン中 - バーコードをカメラに向けてください", "warn");
         updateButtons("scanning");
         
         s0 = s1 = 0;
         
         await currentAdapter.startScan((result) => {
           const scanTime = s1 - s0;
-          log(`📊 検出完了 - 時間: ${scanTime.toFixed(1)}ms`);
+          log(`⚡ 認識完了: ${scanTime.toFixed(1)}ms で検出`);
           
-          setStatus(`検出完了: ${result.text}`, "ok");
+          setStatus(`✅ 検出完了: ${result.text}`, "ok");
           updateButtons("ready");
           
           recordMeasurement({
             init_time_ms: (t1 - t0).toFixed(1),
             scan_time_ms: scanTime.toFixed(1),
             detected_text: result.text,
-            format: result.format
+            format: result.format,
+            is_isbn: result.isISBN || false
           });
         });
         
@@ -478,6 +524,7 @@
         await currentAdapter.stopScan();
         setStatus("スキャン停止", "ok");
         updateButtons("ready");
+        log("⏹️ スキャンを停止しました");
       }
     };
 
@@ -485,8 +532,9 @@
       if (currentAdapter) {
         await currentAdapter.cleanup();
         currentAdapter = null;
-        setStatus("解放完了", "ok");
+        setStatus("解放完了 - 新しいテストが可能です", "ok");
         updateButtons("idle");
+        log("🗑️ リソースを解放しました");
       }
     };
 
@@ -495,21 +543,36 @@
     // === 初期化 ===
     window.addEventListener('load', async () => {
       try {
-        // ライブラリ確認
+        // 少し待ってからライブラリ確認（完全読み込み待ち）
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
         const libStatus = checkLibraries();
         
         if (!libStatus.zxing && !libStatus.quagga2) {
           throw new Error('利用可能なライブラリがありません');
         }
         
+        // ZXingが利用可能でない場合、Quagga2に切り替え
+        if (!libStatus.zxing && libStatus.quagga2) {
+          $("#lib").value = "quagga2";
+          log("🔄 ZXing が利用できないため Quagga2 を選択");
+        }
+        
         await updateDeviceList();
         log("🚀 アプリケーション準備完了");
-        log("📖 使い方: カメラを選択 → ライブラリを選択 → カメラ起動 → 認識開始");
-        setStatus("準備完了 - カメラを起動してください");
+        log("📖 使用方法:");
+        log("  1. ライブラリを選択 (ZXing推奨)");
+        log("  2. カメラを選択");
+        log("  3. 解像度を選択");
+        log("  4. カメラ起動 → 認識開始");
+        log("📚 ISBN対応: 978/979で始まる13桁バーコードを検出します");
+        
+        setStatus("準備完了 - カメラを起動してください", "ok");
         updateButtons("idle");
+        
       } catch (error) {
         log("❌ 初期化エラー:", error.message);
-        setStatus("初期化エラー", "error");
+        setStatus("初期化エラー - ページを再読み込みしてください", "error");
       }
     });
   </script>
