@@ -193,14 +193,6 @@
         }
     };
 
-    // --- 初期化 --- //
-    // DOMが完全に読み込まれてから初期化処理を実行
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', () => NotificationManager.init());
-    } else {
-        NotificationManager.init();
-    }
-
-    // グローバルスコープに公開（デバッグ用）
+    // グローバルスコープに公開
     window.NotificationManager = NotificationManager;
 })();
