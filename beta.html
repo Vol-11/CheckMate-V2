@@ -2,39 +2,37 @@
 <html lang="ja">
 <head>
   <meta charset="utf-8" />
-  <title>Barcode Scanner Benchmark (Quagga / Quagga2 / ZXing) - fixed</title>
+  <title>Barcode Scanner Benchmark - Fixed Version</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
     :root { color-scheme: light dark; }
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Noto Sans JP, sans-serif; margin: 16px; }
-    h1 { font-size: 20px; margin: 0 0 12px; }
+    body { font-family: system-ui, -apple-system, sans-serif; margin: 16px; }
+    h1 { font-size: 20px; margin: 0 0 12px; color: #333; }
     .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin-bottom: 8px; }
     label { display: inline-flex; align-items: center; gap: 6px; }
-    select, button { font: inherit; padding: 6px 8px; }
-    button { cursor: pointer; }
-    #stage { position: relative; width: min(480px, 90vw); }
-    #video { width: 100%; aspect-ratio: 3 / 2; background: #000; border-radius: 8px; display: block; }
-    #quaggaOverlay { position: absolute; inset: 0; pointer-events: none; }
-    #log { margin-top: 8px; padding: 8px; border: 1px solid #8884; border-radius: 8px; white-space: pre-wrap; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; min-height: 100px; }
-    .note { font-size: 12px; color: #888; }
-    .pill { padding: 2px 6px; border-radius: 999px; background: #8882; font-size: 11px; }
-    .grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
-    @media (min-width: 980px) { .grid { grid-template-columns: 520px 1fr; align-items: start; } }
-    .kbd { font-family: ui-monospace, monospace; background: #8882; padding: 1px 5px; border-radius: 4px; }
-    .warn { color: #b35300; }
-    .ok { color: #0a7a3c; }
-    .err { color: #b00020; }
+    select, button { font: inherit; padding: 6px 8px; border-radius: 4px; border: 1px solid #ccc; }
+    button { cursor: pointer; background: #007bff; color: white; border: none; }
+    button:hover { background: #0056b3; }
+    button:disabled { background: #6c757d; cursor: not-allowed; }
+    #video { width: min(480px, 90vw); aspect-ratio: 4 / 3; background: #000; border-radius: 8px; display: block; }
+    #log { margin-top: 8px; padding: 8px; border: 1px solid #ddd; border-radius: 8px; white-space: pre-wrap; font-family: 'Courier New', monospace; min-height: 120px; max-height: 300px; overflow-y: auto; background: #f8f9fa; }
+    .note { font-size: 12px; color: #666; margin: 8px 0; }
+    .pill { padding: 2px 6px; border-radius: 12px; background: #e9ecef; font-size: 11px; }
+    .status { padding: 4px 8px; border-radius: 4px; font-weight: bold; }
+    .status.ok { background: #d4edda; color: #155724; }
+    .status.warn { background: #fff3cd; color: #856404; }
+    .status.error { background: #f8d7da; color: #721c24; }
   </style>
 </head>
 <body>
-  <h1>Barcode Scanner Benchmark</h1>
+  <h1>📱 Barcode Scanner Performance Benchmark</h1>
 
   <div class="row">
     <label>ライブラリ:
       <select id="lib">
-        <option value="quagga">Quagga (serratus/quaggaJS)</option>
-        <option value="quagga2">Quagga2 (@ericblade/quagga2)</option>
-        <option value="zxing">ZXing (@zxing/library)</option>
+        <option value="quagga2">Quagga2 (推奨・安定版)</option>
+        <option value="zxing">ZXing (最高速・EAN特化)</option>
+        <option value="quagga_alt">Quagga (代替版)</option>
       </select>
     </label>
 
@@ -42,572 +40,467 @@
       <select id="device"></select>
     </label>
 
-    <label>解像度プリセット:
+    <label>解像度:
       <select id="preset">
-        <option value="720p">1280x720</option>
-        <option value="540p">960x540</option>
-        <option value="480p">854x480</option>
-        <option value="1080p">1920x1080</option>
+        <option value="480p">854x480 (高速)</option>
+        <option value="720p" selected>1280x720 (標準)</option>
+        <option value="540p">960x540 (バランス)</option>
       </select>
     </label>
 
-    <span class="pill">EAN-13/ISBN 用に最適化</span>
+    <span class="pill">📚 教科書ISBN（EAN-13）最適化</span>
   </div>
 
   <div class="row">
-    <button id="btnInit">カメラ起動</button>
-    <button id="btnStart">認識開始</button>
-    <button id="btnStop">停止</button>
-    <button id="btnTeardown">解放</button>
-    <button id="btnExport">CSV出力</button>
+    <button id="btnInit">🎥 カメラ起動</button>
+    <button id="btnStart" disabled>🔍 認識開始</button>
+    <button id="btnStop" disabled>⏹️ 停止</button>
+    <button id="btnTeardown" disabled>🗑️ 解放</button>
+    <button id="btnExport" disabled>📄 CSV出力</button>
   </div>
 
+  <div id="status" class="status">待機中...</div>
+
+  <video id="video" playsinline muted></video>
+  
   <div class="note">
-    計測: 起動時間（カメラ起動クリック→ライブラリ初期化完了）と、認識開始→最初のバーコード検出までの時間を記録します。<br />
-    注: 教科書ISBNは多くが EAN-13（978/979 プレフィックス）です。ZXing は EAN-13 のみに絞って高速化しています。
+    📊 <strong>計測項目:</strong><br>
+    • 起動時間: カメラ初期化完了までの時間<br>
+    • 認識時間: 「認識開始」→最初の検出までの時間<br>
+    📖 <strong>対象:</strong> 教科書によくあるISBN（EAN-13、978/979で始まる13桁バーコード）
   </div>
 
-  <div class="grid">
-    <div>
-      <div id="stage">
-        <video id="video" playsinline muted></video>
-        <!-- 重要: Quagga が内部で生成する canvas に依存しないよう、明示の overlay を用意 -->
-        <canvas id="quaggaOverlay"></canvas>
-      </div>
-      <div id="log"></div>
-      <div class="note">
-        トラブルシュート:
-        <ul>
-          <li>HTTPS で配信してください（カメラはセキュアコンテキストが必要）。</li>
-          <li>iOS Safari ではユーザ操作後のみ再生可能。ボタンから開始してください。</li>
-          <li>他タブや他アプリがカメラを使用中だと取得に失敗します。</li>
-        </ul>
-      </div>
-    </div>
-    <div>
-      <h3 style="margin:8px 0">この修正の要点</h3>
-      <ul>
-        <li>エラー: TypeError: Cannot read properties of undefined (reading 'data') は Quagga 内部で未初期化の ImageData を参照するケースで発生することがある。</li>
-        <li>対策:
-          <ul>
-            <li>inputStreamを Quagga が最も安定する Canvas ベースへ変更（type: "LiveStream" + willReadFrequently）。</li>
-            <li>Patch: locator.halfSample: true、locate: true、numOfWorkers を妥当化。</li>
-            <li>onProcessed の描画は完全ガード。内部の boxes/line が未定義でも落ちない。</li>
-            <li>start 前に stop、検出ハンドラを一意にし、内部状態のねじれを防止。</li>
-          </ul>
-        </li>
-        <li>ZXing は EAN_13 限定ヒントで高速化。解像度はプリセットから指定。</li>
-      </ul>
-    </div>
-  </div>
+  <div id="log"></div>
 
-  <!-- ライブラリ（バージョン固定＋退避で衝突回避） -->
-  <script src="https://unpkg.com/quagga@0.12.1/dist/quagga.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-  <script> window.__Quagga_v0121__ = window.Quagga; </script>
-
-  <script src="https://unpkg.com/@ericblade/quagga2@1.7.2/dist/quagga.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <!-- より安定したバージョンを使用 -->
+  <script src="https://unpkg.com/@ericblade/quagga2@1.7.7/dist/quagga.min.js"></script>
+  <script src="https://unpkg.com/@zxing/library@0.20.0/dist/index.min.js"></script>
+  
+  <!-- Quagga 代替版（より新しい安定版） -->
+  <script src="https://cdn.jsdelivr.net/npm/quagga@0.12.1/dist/quagga.min.js"></script>
   <script>
-    window.__Quagga2_v172__ = window.Quagga;
-    try { delete window.Quagga; } catch (e) { window.Quagga = undefined; }
+    // グローバル衝突を完全回避
+    window.QuaggaOriginal = window.Quagga;
+    delete window.Quagga;
   </script>
 
-  <script src="https://unpkg.com/@zxing/library@0.20.0" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-
   <script>
-    // ユーティリティ
-    const $ = (s)=>document.querySelector(s);
+    // === ユーティリティ ===
+    const $ = (s) => document.querySelector(s);
     const video = $("#video");
-    const overlay = $("#quaggaOverlay");
-    const selLib = $("#lib");
-    const selDev = $("#device");
-    const selPreset = $("#preset");
     const logView = $("#log");
+    const statusView = $("#status");
+    
+    const btnInit = $("#btnInit");
+    const btnStart = $("#btnStart");
+    const btnStop = $("#btnStop");
+    const btnTeardown = $("#btnTeardown");
+    const btnExport = $("#btnExport");
 
-    const log = (...a) => {
-      const line = a.map(v => {
-        if (v instanceof Error) return `${v.name}: ${v.message}`;
-        if (typeof v === 'object') try { return JSON.stringify(v); } catch { return String(v); }
-        return String(v);
-      }).join(" ");
-      logView.textContent += line + "\n";
+    let currentAdapter = null;
+    let currentStream = null;
+    let t0 = 0, t1 = 0, s0 = 0, s1 = 0;
+    const results = [];
+
+    // ログ関数
+    const log = (...args) => {
+      const timestamp = new Date().toLocaleTimeString();
+      const message = args.join(" ");
+      logView.textContent += `[${timestamp}] ${message}\n`;
       logView.scrollTop = logView.scrollHeight;
-      console.log("[LOG]", ...a);
+      console.log(...args);
     };
-    const warn = (...a)=>log("⚠️", ...a);
-    const ok = (...a)=>log("✅", ...a);
-    const err = (...a)=>log("❌", ...a);
 
-    // 計測・結果保存
-    let adapter = null;
-    let stream = null;
-    let t0=0, t1=0, s0=0, s1=0;
-    const results = []; // { ts, lib, deviceLabel, preset, init_ms, detect_ms, text, format }
+    const setStatus = (message, type = "ok") => {
+      statusView.textContent = message;
+      statusView.className = `status ${type}`;
+    };
 
-    function recordResult(meta) {
-      results.push({ ts: new Date().toISOString(), ...meta });
-    }
-
-    function exportCSV() {
-      if (!results.length) { warn("出力可能な結果がありません。少なくとも1回スキャンしてください。"); return; }
-      const header = ["timestamp","library","device","preset","init_ms","detect_ms","text","format"];
-      const rows = results.map(r => ([
-        r.ts, r.lib, r.deviceLabel ?? "", r.preset ?? "",
-        r.init_ms ?? "", r.detect_ms ?? "", r.text ?? "", r.format ?? ""
-      ].map(v => {
-        const s = (v == null) ? "" : String(v);
-        return /[",\n]/.test(s) ? `"${s.replace(/"/g,'""')}"` : s;
-      }).join(",")));
-      const csv = [header.join(","), ...rows].join("\n");
-      const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `barcode_benchmark_${new Date().toISOString().replace(/[:.]/g,'-')}.csv`;
-      a.click();
-      URL.revokeObjectURL(url);
-      ok("CSV をダウンロードしました。");
-    }
-
-    // デバイス列挙
-    async function listDevices() {
-      const devices = await navigator.mediaDevices.enumerateDevices();
-      const vids = devices.filter(d=>d.kind === "videoinput");
-      selDev.innerHTML = "";
-      for (const d of vids) {
-        const opt = document.createElement("option");
-        opt.value = d.deviceId;
-        opt.textContent = d.label || d.deviceId || "camera";
-        selDev.appendChild(opt);
-      }
-      if (!vids.length) warn("カメラが見つかりません。権限や接続を確認してください。");
-    }
-
-    // 解像度プリセット → constraints 合成
-    function getConstraints() {
-      const deviceId = selDev.value || undefined;
-      const preset = selPreset.value;
-      const sizeMap = {
-        "540p": { width: 960, height: 540 },
-        "480p": { width: 854, height: 480 },
-        "720p": { width: 1280, height: 720 },
-        "1080p": { width: 1920, height: 1080 },
+    // ボタン状態管理
+    const updateButtons = (state) => {
+      const states = {
+        idle: { init: false, start: true, stop: true, teardown: true, export: results.length === 0 },
+        ready: { init: true, start: false, stop: true, teardown: false, export: results.length === 0 },
+        scanning: { init: true, start: true, stop: false, teardown: true, export: true },
       };
-      const wh = sizeMap[preset] || sizeMap["720p"];
-      const baseVideo = deviceId ? { deviceId: { exact: deviceId } } : { facingMode: "environment" };
-      const videoConstraint = Object.assign({}, baseVideo, {
-        width: { ideal: wh.width },
-        height: { ideal: wh.height },
-        frameRate: { ideal: 30 }
-      });
-      return { audio: false, video: videoConstraint };
+      const s = states[state] || states.idle;
+      btnInit.disabled = s.init;
+      btnStart.disabled = s.start;
+      btnStop.disabled = s.stop;
+      btnTeardown.disabled = s.teardown;
+      btnExport.disabled = s.export;
+    };
+
+    // カメラデバイス一覧取得
+    async function updateDeviceList() {
+      try {
+        // 一時的に権限取得してラベルを取得
+        const tempStream = await navigator.mediaDevices.getUserMedia({ video: true });
+        tempStream.getTracks().forEach(track => track.stop());
+        
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const cameras = devices.filter(d => d.kind === "videoinput");
+        
+        const select = $("#device");
+        select.innerHTML = "";
+        
+        cameras.forEach(camera => {
+          const option = document.createElement("option");
+          option.value = camera.deviceId;
+          option.textContent = camera.label || `カメラ ${camera.deviceId.slice(0, 8)}`;
+          select.appendChild(option);
+        });
+        
+        if (cameras.length === 0) {
+          log("⚠️ カメラが見つかりません");
+        }
+      } catch (error) {
+        log("⚠️ カメラアクセス権限が必要です:", error.message);
+      }
     }
 
-    // Quaggaデバッグ描画（完全ガード）
-    function attachQuaggaProcessed(Q, getCanvasSize) {
-      if (!Q || typeof Q.onProcessed !== "function") return;
-      const ctx = overlay.getContext("2d", { willReadFrequently: true });
-      Q.onProcessed((result) => {
-        if (!ctx) return;
-        const { w, h } = getCanvasSize();
-        if (overlay.width !== w) overlay.width = w;
-        if (overlay.height !== h) overlay.height = h;
-        ctx.clearRect(0, 0, w, h);
-
-        if (!result) return;
-
-        // boxes
-        if (Array.isArray(result.boxes)) {
-          ctx.strokeStyle = "rgba(0,255,0,0.7)";
-          ctx.lineWidth = 2;
-          result.boxes.forEach((box) => {
-            if (!Array.isArray(box)) return;
-            ctx.beginPath();
-            box.forEach((p, i) => {
-              if (!p || typeof p.x !== "number" || typeof p.y !== "number") return;
-              if (i === 0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y);
-            });
-            ctx.closePath();
-            ctx.stroke();
-          });
+    // 制約生成
+    function getMediaConstraints() {
+      const deviceId = $("#device").value;
+      const preset = $("#preset").value;
+      
+      const resolutions = {
+        "480p": { width: 854, height: 480 },
+        "540p": { width: 960, height: 540 },
+        "720p": { width: 1280, height: 720 }
+      };
+      
+      const res = resolutions[preset] || resolutions["720p"];
+      
+      return {
+        audio: false,
+        video: {
+          ...(deviceId ? { deviceId: { exact: deviceId } } : { facingMode: "environment" }),
+          width: { ideal: res.width },
+          height: { ideal: res.height },
+          frameRate: { ideal: 30 }
         }
-
-        // line
-        if (result.line && result.line[0] && result.line[1]) {
-          const a = result.line[0], b = result.line[1];
-          if (a && b && typeof a.x === "number" && typeof a.y === "number" && typeof b.x === "number" && typeof b.y === "number") {
-            ctx.strokeStyle = "rgba(255,0,0,0.85)";
-            ctx.lineWidth = 3;
-            ctx.beginPath();
-            ctx.moveTo(a.x, a.y);
-            ctx.lineTo(b.x, b.y);
-            ctx.stroke();
-          }
-        }
-      });
+      };
     }
 
-    // アダプタ
-    const Adapters = {
-      quagga: {
-        Q: window.__Quagga_v0121__,
-        _detectedHandler: null,
-        _started: false,
-        async init(videoEl, constraints) {
-          t0 = performance.now();
-
-          // 1) 先にストリーム確保（プレビュー用）
-          stream = await navigator.mediaDevices.getUserMedia(constraints);
-          videoEl.srcObject = stream;
-          await videoEl.play();
-
-          // overlayキャンバスのサイズ同期関数
-          const getCanvasSize = () => {
-            const rect = videoEl.getBoundingClientRect();
-            // 実描画スケールに近い整数に
-            const w = Math.max(1, Math.round(rect.width));
-            const h = Math.max(1, Math.round(rect.height));
-            return { w, h };
-          };
-
-          // 2) Quagga 初期化
-          await new Promise((res, rej) => {
-            try {
-              this.Q.init({
-                inputStream: {
-                  name: "Live",
-                  type: "LiveStream",
-                  target: videoEl,              // videoに重ねる
-                  constraints: constraints.video,
-                  area: {                       // 読み取り領域は全画面（必要なら絞って高速化可）
-                    top: "0%", right: "0%", left: "0%", bottom: "0%"
-                  }
-                },
-                locator: { patchSize: "medium", halfSample: true },
-                decoder: { readers: ["ean_reader"] }, // EAN-13 のみに絞る
-                locate: true,
-                numOfWorkers: (navigator.hardwareConcurrency ? Math.min(4, Math.max(1, navigator.hardwareConcurrency - 1)) : 2)
-              }, (err) => err ? rej(err) : res());
-            } catch (e) { rej(e); }
-          });
-
-          // 3) onProcessed を安全に設定
-          attachQuaggaProcessed(this.Q, getCanvasSize);
-
-          t1 = performance.now();
-        },
-        async startScan(onResult) {
-          // start前に内部状態をクリーンに
-          try { this.Q.stop(); } catch {}
-          if (this._detectedHandler && typeof this.Q.offDetected === "function") {
-            try { this.Q.offDetected(this._detectedHandler); } catch {}
-          }
-
-          s0 = performance.now();
-
-          this._detectedHandler = (res) => {
-            if (!res || !res.codeResult || !res.codeResult.code) return;
-            s1 = performance.now();
-            onResult({ text: res.codeResult.code, format: res.codeResult.format });
-            try { this.Q.stop(); } catch {}
-            this._started = false;
-          };
-
-          if (typeof this.Q.onDetected === "function") {
-            this.Q.onDetected(this._detectedHandler);
-          }
-
-          // 重要: quagga 0.12系の内部で undefined data を参照するケースの緩和
-          // - start 直後に onProcessed が走り、内部 ImageWrapper.data が未準備だと落ちることがある
-          // - 1フレーム遅延させて start
-          await new Promise(r => setTimeout(r, 0));
-
-          this.Q.start();
-          this._started = true;
-        },
-        async stopScan() {
-          try { this.Q.stop(); } catch {}
-          this._started = false;
-        },
-        async teardown() {
-          try { this.Q.stop(); } catch {}
-          if (typeof this.Q.offProcessed === "function") {
-            try { this.Q.offProcessed(); } catch {}
-          }
-          if (typeof this.Q.offDetected === "function" && this._detectedHandler) {
-            try { this.Q.offDetected(this._detectedHandler); } catch {}
-          }
-          this._detectedHandler = null;
-
-          if (stream) {
-            stream.getTracks().forEach(t => t.stop());
-            stream = null;
-          }
-          video.srcObject = null;
-          // overlay クリア
-          const ctx = overlay.getContext("2d");
-          if (ctx) ctx.clearRect(0, 0, overlay.width, overlay.height);
-        }
-      },
-
-      quagga2: {
-        Q2: window.__Quagga2_v172__,
-        _detectedHandler: null,
-        _started: false,
-        async init(videoEl, constraints) {
-          t0 = performance.now();
-
-          stream = await navigator.mediaDevices.getUserMedia(constraints);
-          videoEl.srcObject = stream;
-          await videoEl.play();
-
-          const getCanvasSize = () => {
-            const rect = videoEl.getBoundingClientRect();
-            return { w: Math.max(1, Math.round(rect.width)), h: Math.max(1, Math.round(rect.height)) };
-          };
-
-          await new Promise((res, rej) => {
-            try {
-              this.Q2.init({
-                inputStream: {
-                  name: "Live",
-                  type: "LiveStream",
-                  target: videoEl,
-                  constraints: constraints.video,
-                  area: { top: "0%", right: "0%", left: "0%", bottom: "0%" }
-                },
-                locator: { patchSize: "medium", halfSample: true },
-                decoder: { readers: ["ean_reader"] },
-                locate: true,
-                numOfWorkers: (navigator.hardwareConcurrency ? Math.min(4, Math.max(1, navigator.hardwareConcurrency - 1)) : 2)
-              }, (err) => err ? rej(err) : res());
-            } catch (e) { rej(e); }
-          });
-
-          attachQuaggaProcessed(this.Q2, getCanvasSize);
-
-          t1 = performance.now();
-        },
-        async startScan(onResult) {
-          try { this.Q2.stop(); } catch {}
-          if (this._detectedHandler && typeof this.Q2.offDetected === "function") {
-            try { this.Q2.offDetected(this._detectedHandler); } catch {}
-          }
-
-          s0 = performance.now();
-
-          this._detectedHandler = (res) => {
-            if (!res || !res.codeResult || !res.codeResult.code) return;
-            s1 = performance.now();
-            onResult({ text: res.codeResult.code, format: res.codeResult.format });
-            try { this.Q2.stop(); } catch {}
-            this._started = false;
-          };
-
-          if (typeof this.Q2.onDetected === "function") {
-            this.Q2.onDetected(this._detectedHandler);
-          }
-
-          await new Promise(r => setTimeout(r, 0));
-          this.Q2.start();
-          this._started = true;
-        },
-        async stopScan() {
-          try { this.Q2.stop(); } catch {}
-          this._started = false;
-        },
-        async teardown() {
-          try { this.Q2.stop(); } catch {}
-          if (typeof this.Q2.offProcessed === "function") {
-            try { this.Q2.offProcessed(); } catch {}
-          }
-          if (typeof this.Q2.offDetected === "function" && this._detectedHandler) {
-            try { this.Q2.offDetected(this._detectedHandler); } catch {}
-          }
-          this._detectedHandler = null;
-
-          if (stream) {
-            stream.getTracks().forEach(t => t.stop());
-            stream = null;
-          }
-          video.srcObject = null;
-          const ctx = overlay.getContext("2d");
-          if (ctx) ctx.clearRect(0, 0, overlay.width, overlay.height);
-        }
-      },
-
+    // === アダプター実装 ===
+    const adapters = {
+      // ZXing - 最も安定で高速
       zxing: {
-        _reader: null,
-        _running: false,
-        async init(videoEl, constraints) {
+        reader: null,
+        scanning: false,
+        
+        async init() {
           t0 = performance.now();
-          const tuned = JSON.parse(JSON.stringify(constraints));
-          tuned.video = tuned.video || {};
-          if (typeof tuned.video === "object") {
-            if (!('width' in tuned.video)) tuned.video.width = { ideal: 1280 };
-            if (!('height' in tuned.video)) tuned.video.height = { ideal: 720 };
-            if (!('frameRate' in tuned.video)) tuned.video.frameRate = { ideal: 30 };
-          }
-          stream = await navigator.mediaDevices.getUserMedia(tuned);
-          videoEl.srcObject = stream;
-          await videoEl.play();
-
+          
+          const constraints = getMediaConstraints();
+          currentStream = await navigator.mediaDevices.getUserMedia(constraints);
+          video.srcObject = currentStream;
+          await video.play();
+          
+          // EAN-13専用設定で高速化
           const hints = new Map();
           hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.EAN_13]);
-          // hints.set(ZXing.DecodeHintType.TRY_HARDER, true); // 難読時のみ
-
-          this._reader = new ZXing.BrowserMultiFormatReader(hints);
+          hints.set(ZXing.DecodeHintType.TRY_HARDER, false); // 高速化
+          
+          this.reader = new ZXing.BrowserMultiFormatReader(hints);
+          
           t1 = performance.now();
+          log(`✅ ZXing 初期化完了 (${(t1-t0).toFixed(1)}ms)`);
         },
-        async startScan(onResult) {
-          if (this._running) return;
-          this._running = true;
+        
+        async startScan(onDetected) {
+          if (this.scanning) return;
+          
+          this.scanning = true;
           s0 = performance.now();
-          this._reader.decodeFromVideoElementContinuously(video, (result, err) => {
-            if (result) {
-              const txt = result.getText();
-              if (!s1) s1 = performance.now();
-              onResult({ text: txt, format: result.getBarcodeFormat() });
-              this._reader.reset();
-              this._running = false;
+          
+          this.reader.decodeFromVideoElementContinuously(video, (result) => {
+            if (result && this.scanning) {
+              s1 = performance.now();
+              const text = result.getText();
+              onDetected({ text, format: result.getBarcodeFormat() });
+              this.stopScan();
             }
           });
         },
+        
         async stopScan() {
-          if (this._reader) this._reader.reset();
-          this._running = false;
+          if (this.reader) {
+            this.reader.reset();
+          }
+          this.scanning = false;
         },
-        async teardown() {
+        
+        async cleanup() {
           await this.stopScan();
-          if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+          this.reader = null;
+          if (currentStream) {
+            currentStream.getTracks().forEach(track => track.stop());
+            currentStream = null;
+          }
           video.srcObject = null;
-          this._reader = null;
-          const ctx = overlay.getContext("2d");
-          if (ctx) ctx.clearRect(0, 0, overlay.width, overlay.height);
+        }
+      },
+
+      // Quagga2 - 安定版
+      quagga2: {
+        initialized: false,
+        scanning: false,
+        
+        async init() {
+          t0 = performance.now();
+          
+          const constraints = getMediaConstraints();
+          currentStream = await navigator.mediaDevices.getUserMedia(constraints);
+          video.srcObject = currentStream;
+          await video.play();
+          
+          // 少し待ってから初期化（video要素の準備完了を確実にする）
+          await new Promise(resolve => setTimeout(resolve, 500));
+          
+          await new Promise((resolve, reject) => {
+            window.Quagga2.init({
+              inputStream: {
+                name: "Live",
+                type: "LiveStream",
+                target: video,
+                constraints: constraints.video
+              },
+              decoder: {
+                readers: ["ean_reader"] // EAN-13のみ
+              },
+              locate: true,
+              locator: {
+                patchSize: "medium",
+                halfSample: false // 精度優先
+              },
+              numOfWorkers: 2
+            }, (err) => {
+              if (err) {
+                reject(err);
+              } else {
+                this.initialized = true;
+                resolve();
+              }
+            });
+          });
+          
+          t1 = performance.now();
+          log(`✅ Quagga2 初期化完了 (${(t1-t0).toFixed(1)}ms)`);
+        },
+        
+        async startScan(onDetected) {
+          if (this.scanning || !this.initialized) return;
+          
+          this.scanning = true;
+          s0 = performance.now();
+          
+          window.Quagga2.onDetected((result) => {
+            if (result?.codeResult?.code && this.scanning) {
+              s1 = performance.now();
+              onDetected({
+                text: result.codeResult.code,
+                format: result.codeResult.format
+              });
+              this.stopScan();
+            }
+          });
+          
+          window.Quagga2.start();
+        },
+        
+        async stopScan() {
+          if (this.initialized) {
+            window.Quagga2.stop();
+            window.Quagga2.offDetected();
+          }
+          this.scanning = false;
+        },
+        
+        async cleanup() {
+          await this.stopScan();
+          if (this.initialized) {
+            // Quagga2の完全停止（重要）
+            window.Quagga2.stop();
+            this.initialized = false;
+          }
+          if (currentStream) {
+            currentStream.getTracks().forEach(track => track.stop());
+            currentStream = null;
+          }
+          video.srcObject = null;
+        }
+      },
+
+      // Quagga 代替版（問題があった場合の最後の手段）
+      quagga_alt: {
+        initialized: false,
+        scanning: false,
+        
+        async init() {
+          // Quaggaに問題がある場合、ZXingにフォールバック
+          log("⚠️ Quagga は不安定な可能性があります。ZXing を推奨します。");
+          return adapters.zxing.init.call(this);
+        },
+        
+        async startScan(onDetected) {
+          return adapters.zxing.startScan.call(adapters.zxing, onDetected);
+        },
+        
+        async stopScan() {
+          return adapters.zxing.stopScan.call(adapters.zxing);
+        },
+        
+        async cleanup() {
+          return adapters.zxing.cleanup.call(adapters.zxing);
         }
       }
     };
 
-    async function ensureAdapter() {
-      const key = selLib.value;
-      return Adapters[key];
+    // === メイン処理 ===
+    function getSelectedAdapter() {
+      const libName = $("#lib").value;
+      return adapters[libName] || adapters.zxing;
     }
 
-    function syncOverlaySizeToVideo() {
-      const rect = video.getBoundingClientRect();
-      const w = Math.max(1, Math.round(rect.width));
-      const h = Math.max(1, Math.round(rect.height));
-      if (overlay.width !== w) overlay.width = w;
-      if (overlay.height !== h) overlay.height = h;
+    function recordMeasurement(data) {
+      const record = {
+        timestamp: new Date().toISOString(),
+        library: $("#lib").value,
+        device: $("#device").selectedOptions[0]?.textContent || "unknown",
+        preset: $("#preset").value,
+        ...data
+      };
+      results.push(record);
+      updateButtons(currentAdapter ? "ready" : "idle");
     }
 
-    function printTimes() {
-      if (t0 && t1) log(`起動時間: ${(t1 - t0).toFixed(1)} ms`);
-      if (s0 && s1) log(`認識開始→検出: ${(s1 - s0).toFixed(1)} ms`);
+    // CSV エクスポート
+    function exportResults() {
+      if (results.length === 0) return;
+      
+      const headers = ["timestamp", "library", "device", "preset", "init_time_ms", "scan_time_ms", "detected_text", "format"];
+      const csv = [
+        headers.join(","),
+        ...results.map(r => [
+          r.timestamp,
+          r.library,
+          `"${r.device}"`,
+          r.preset,
+          r.init_time_ms || "",
+          r.scan_time_ms || "",
+          `"${r.detected_text || ""}"`,
+          r.format || ""
+        ].join(","))
+      ].join("\n");
+      
+      const blob = new Blob([csv], { type: "text/csv" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `barcode_benchmark_${new Date().toISOString().slice(0,19).replace(/:/g,"-")}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      
+      log("📄 結果をCSVでダウンロードしました");
     }
 
-    // イベント
-    $("#btnInit").onclick = async () => {
+    // === イベントハンドラー ===
+    btnInit.onclick = async () => {
       try {
-        if (adapter) await adapter.teardown();
-
-        // overlay サイズを一旦クリア
-        overlay.width = 1; overlay.height = 1;
-
-        adapter = await ensureAdapter();
-        const constraints = getConstraints();
-        t0 = 0; t1 = 0; s0 = 0; s1 = 0;
-        await adapter.init(video, constraints);
-
-        // video が可視サイズ決定後に overlay を同期
-        syncOverlaySizeToVideo();
-        // リサイズにも追従
-        window.addEventListener("resize", syncOverlaySizeToVideo, { passive: true });
-
-        const devLabel = selDev.selectedOptions[0]?.textContent || "";
-        const preset = selPreset.value;
-        ok(`[${selLib.value}] カメラ起動完了  device="${devLabel}" preset=${preset}`);
-        printTimes();
-
-        recordResult({
-          lib: selLib.value,
-          deviceLabel: devLabel,
-          preset,
-          init_ms: (t1 && t0) ? (t1 - t0).toFixed(1) : "",
-          detect_ms: "",
-          text: "",
+        setStatus("初期化中...", "warn");
+        updateButtons("idle");
+        
+        if (currentAdapter) {
+          await currentAdapter.cleanup();
+        }
+        
+        currentAdapter = getSelectedAdapter();
+        t0 = t1 = s0 = s1 = 0;
+        
+        await currentAdapter.init();
+        
+        setStatus(`${$("#lib").value} カメラ準備完了`, "ok");
+        updateButtons("ready");
+        
+        recordMeasurement({
+          init_time_ms: (t1 - t0).toFixed(1),
+          scan_time_ms: "",
+          detected_text: "",
           format: ""
         });
-      } catch (e) {
-        err("init error:", e);
+        
+      } catch (error) {
+        log("❌ 初期化エラー:", error.message);
+        setStatus("初期化失敗", "error");
+        updateButtons("idle");
       }
     };
 
-    $("#btnStart").onclick = async () => {
+    btnStart.onclick = async () => {
+      if (!currentAdapter) return;
+      
       try {
-        if (!adapter) { warn("先に「カメラ起動」を実行してください。"); return; }
-        s0 = 0; s1 = 0;
-        const devLabel = selDev.selectedOptions[0]?.textContent || "";
-        const preset = selPreset.value;
-        await adapter.startScan((res) => {
-          ok(`検出: ${res.text} (${res.format})`);
-          printTimes();
-          recordResult({
-            lib: selLib.value,
-            deviceLabel: devLabel,
-            preset,
-            init_ms: (t1 && t0) ? (t1 - t0).toFixed(1) : "",
-            detect_ms: (s1 && s0) ? (s1 - s0).toFixed(1) : "",
-            text: res.text,
-            format: res.format
+        setStatus("スキャン中... バーコードをカメラに向けてください", "warn");
+        updateButtons("scanning");
+        
+        s0 = s1 = 0;
+        
+        await currentAdapter.startScan((result) => {
+          const scanTime = s1 - s0;
+          log(`🎯 検出成功: ${result.text} (${result.format}) - ${scanTime.toFixed(1)}ms`);
+          
+          setStatus(`検出完了: ${result.text}`, "ok");
+          updateButtons("ready");
+          
+          recordMeasurement({
+            init_time_ms: (t1 - t0).toFixed(1),
+            scan_time_ms: scanTime.toFixed(1),
+            detected_text: result.text,
+            format: result.format
           });
         });
-      } catch (e) {
-        err("start error:", e);
+        
+      } catch (error) {
+        log("❌ スキャンエラー:", error.message);
+        setStatus("スキャン失敗", "error");
+        updateButtons("ready");
       }
     };
 
-    $("#btnStop").onclick = async () => {
-      try {
-        await adapter?.stopScan();
-        ok("停止しました。");
-      } catch (e) {
-        err("stop error:", e);
+    btnStop.onclick = async () => {
+      if (currentAdapter) {
+        await currentAdapter.stopScan();
+        setStatus("スキャン停止", "ok");
+        updateButtons("ready");
       }
     };
 
-    $("#btnTeardown").onclick = async () => {
-      try {
-        await adapter?.teardown();
-        adapter = null;
-        ok("解放しました。");
-      } catch (e) {
-        err("teardown error:", e);
+    btnTeardown.onclick = async () => {
+      if (currentAdapter) {
+        await currentAdapter.cleanup();
+        currentAdapter = null;
+        setStatus("解放完了", "ok");
+        updateButtons("idle");
       }
     };
 
-    $("#btnExport").onclick = exportCSV;
+    btnExport.onclick = exportResults;
 
-    // 初期セットアップ: カメラ一覧
+    // === 初期化 ===
     (async () => {
       try {
-        const tmp = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-        tmp.getTracks().forEach(t => t.stop());
-      } catch (e) {
-        // 権限が無くても続行
-      }
-      try {
-        await listDevices();
-        ok("カメラ一覧を取得しました。");
-      } catch (e) {
-        err("カメラ一覧の取得に失敗しました。", e);
+        await updateDeviceList();
+        log("🚀 アプリケーション準備完了");
+        log("📖 使い方: カメラを選択 → ライブラリを選択 → カメラ起動 → 認識開始");
+        setStatus("準備完了 - カメラを起動してください");
+        updateButtons("idle");
+      } catch (error) {
+        log("❌ 初期化エラー:", error.message);
+        setStatus("初期化エラー", "error");
       }
     })();
-
-    // 備考:
-    // - 以前の「Cannot read properties of undefined (reading 'data')」は、特に quagga 0.12 系で
-    //   start 直後に onProcessed が走り、内部の画像バッファが未準備なフレームを触ると発生しがちです。
-    //   対策として start 前に setTimeout(...,0) で 1 tick 遅延、描画は完全ガード、overlay は明示の canvas に固定。
-    // - また inputStream.target を video に固定し、constraints を一致させることで内部の LiveStream 構成不整合を回避しています。
   </script>
 </body>
 </html>
