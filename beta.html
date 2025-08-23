@@ -5,28 +5,35 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Quagga vs Quagga2 vs ZXing ベンチマーク (EAN-13特化)</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://webrtc.github.io/adapter/adapter-latest.js"></script>
     <script src="https://unpkg.com/quagga@latest/dist/quagga.min.js"></script>
     <script src="https://unpkg.com/@ericblade/quagga2@latest/dist/quagga.min.js"></script>
     <script src="https://unpkg.com/@zxing/library@latest"></script>
     <style>
         #interactive {
             position: relative;
+            background: #000;
         }
         #interactive video,
+        #zxingVideo {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
         #interactive canvas {
             position: absolute;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-        }
-        #interactive canvas {
             pointer-events: none;
+            z-index: 10;
         }
         #zxingVideo {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
+            position: absolute;
+            top: 0;
+            left: 0;
         }
         .viewport {
             position: relative;
@@ -36,7 +43,7 @@
             position: absolute;
             top: 0;
             left: 0;
-            z-index: 10;
+            z-index: 20;
         }
     </style>
 </head>
@@ -126,7 +133,7 @@
                 <div id="interactive" class="viewport border-2 border-gray-300 rounded-lg overflow-hidden" 
                      style="width: 100%; max-width: 640px; height: 480px;">
                     <video id="zxingVideo" style="display: none;"></video>
-                    <div class="flex items-center justify-center h-full text-gray-500" id="placeholder">
+                    <div class="flex items-center justify-center h-full text-white text-lg font-semibold" id="placeholder">
                         カメラを開始してください
                     </div>
                 </div>
@@ -294,7 +301,7 @@
                 try {
                     if (this.isScanning) {
                         this.stopCamera();
-                        await new Promise(resolve => setTimeout(resolve, 500));
+                        await new Promise(resolve => setTimeout(resolve, 1000));
                     }
                     
                     const resolution = this.getResolution();
@@ -325,7 +332,6 @@
             }
             
             async startZXingCamera(startTime, resolution) {
-                // ZXingをEAN-13のみに制限して高速化
                 this.zxingCodeReader = new ZXing.BrowserMultiFormatReader();
                 
                 this.zxingVideo.style.display = 'block';
@@ -356,12 +362,24 @@
             async startQuaggaCamera(startTime, resolution) {
                 const QuaggaLib = this.getQuaggaInstance();
                 
+                // ZXingビデオを非表示
                 this.zxingVideo.style.display = 'none';
                 
+                // DOM要素をクリア
+                const interactive = document.querySelector('#interactive');
+                const existingVideo = interactive.querySelector('video:not(#zxingVideo)');
+                const existingCanvas = interactive.querySelectorAll('canvas');
+                
+                if (existingVideo) {
+                    existingVideo.remove();
+                }
+                existingCanvas.forEach(canvas => canvas.remove());
+                
                 const constraints = {
-                    width: { ideal: resolution.width },
-                    height: { ideal: resolution.height },
-                    facingMode: "environment"
+                    width: resolution.width,
+                    height: resolution.height,
+                    facingMode: "environment",
+                    aspectRatio: { min: 1, max: 2 }
                 };
                 
                 if (this.cameraSelect.value) {
@@ -369,21 +387,27 @@
                     delete constraints.facingMode;
                 }
                 
-                // EAN-13に固定して高速化
+                // 最適化されたQuagga設定
                 const config = {
                     inputStream: {
                         name: "Live",
                         type: "LiveStream",
-                        target: document.querySelector('#interactive'),
-                        constraints: constraints
+                        target: interactive,
+                        constraints: constraints,
+                        area: {
+                            top: "0%",
+                            right: "0%",
+                            left: "0%",
+                            bottom: "0%"
+                        }
                     },
                     locator: {
                         patchSize: "medium",
                         halfSample: true
                     },
-                    numOfWorkers: navigator.hardwareConcurrency ? Math.min(navigator.hardwareConcurrency, 2) : 1,
+                    numOfWorkers: Math.min(navigator.hardwareConcurrency || 2, 2),
                     decoder: {
-                        readers: ["ean_reader"] // EAN-13のみに固定
+                        readers: ["ean_reader"]
                     },
                     locate: true
                 };
@@ -399,9 +423,12 @@
                         try {
                             QuaggaLib.start();
                             
-                            const endTime = performance.now();
-                            const cameraTime = Math.round(endTime - startTime);
-                            this.cameraStartTimeEl.textContent = cameraTime + ' ms';
+                            // 初期化完了後に時間を測定
+                            setTimeout(() => {
+                                const endTime = performance.now();
+                                const cameraTime = Math.round(endTime - startTime);
+                                this.cameraStartTimeEl.textContent = cameraTime + ' ms';
+                            }, 100);
                             
                             this.isScanning = true;
                             this.updateButtonStates();
@@ -483,10 +510,9 @@
                     throw new Error('ZXing code reader not initialized');
                 }
                 
-                // EAN-13のみに制限したヒント
                 const hints = new Map();
                 hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.EAN_13]);
-                hints.set(ZXing.DecodeHintType.TRY_HARDER, false); // 高速化のためfalse
+                hints.set(ZXing.DecodeHintType.TRY_HARDER, false);
                 
                 try {
                     const result = await this.zxingCodeReader.decodeOnceFromVideoDevice(
@@ -542,7 +568,6 @@
                 
                 QuaggaLib.onDetected(this.scanDetectedHandler);
                 
-                // 30秒でタイムアウト
                 setTimeout(() => {
                     if (this.scanTimeEl.textContent === '測定中...') {
                         this.scanTimeEl.textContent = 'タイムアウト';
@@ -632,7 +657,7 @@
                 this.cameraStartTimeEl.textContent = '-- ms';
                 this.scanTimeEl.textContent = '-- ms';
                 this.resultEl.classList.add('hidden');
-                this.statsSection.classList.add('hidden');
+                this.statsSection.classList.add('hidden';
                 
                 this.resultsTableBody.innerHTML = `
                     <tr>
