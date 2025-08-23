@@ -140,10 +140,11 @@ function initializeCalendar() {
         if (!name || !selectedDate) return;
 
         const override = await getOverride(selectedDate) || { date: selectedDate, added: [], removed: [] };
-        override.added.push({ id: Date.now(), name: name });
+        override.added.push({ id: Date.now(), name: name, checked: false });
         await saveOverride(override);
         specialItemNameInput.value = '';
-        renderDateSpecificChecklist(selectedDate);
+        await renderDateSpecificChecklist(selectedDate);
+        await updateStats(); // ヘッダーの統計を更新
     });
 
     // アイテムの除外/復帰、特別なアイテムの削除
@@ -163,7 +164,8 @@ function initializeCalendar() {
         }
 
         await saveOverride(override);
-        renderDateSpecificChecklist(selectedDate);
+        await renderDateSpecificChecklist(selectedDate);
+        await updateStats(); // ヘッダーの統計を更新
     });
 
     document.addEventListener('tabChanged', e => {
