@@ -1,0 +1,249 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Scanner Benchmark</title>
+  <style>
+    body { font-family: system-ui, sans-serif; }
+    #video { width: 360px; height: 240px; background: #000; }
+    #log { white-space: pre-wrap; font-family: ui-monospace, monospace; }
+  </style>
+</head>
+<body>
+  <h1>Barcode Scanner Benchmark</h1>
+
+  <label>
+    ライブラリ:
+    <select id="lib">
+      <option value="quagga">Quagga</option>
+      <option value="quagga2">Quagga2</option>
+      <option value="zxing">ZXing (@zxing/library)</option>
+      <!-- <option value="zxing-wasm">ZXing WASM</option> -->
+    </select>
+  </label>
+
+  <label>
+    カメラ: <select id="device"></select>
+  </label>
+
+  <div>
+    <button id="btnInit">カメラ起動</button>
+    <button id="btnStart">認識開始</button>
+    <button id="btnStop">停止</button>
+    <button id="btnTeardown">解放</button>
+  </div>
+
+  <video id="video" playsinline muted></video>
+  <div id="log"></div>
+
+  <!-- libs -->
+  <script src="https://unpkg.com/quagga/dist/quagga.min.js"></script>
+  <script src="https://unpkg.com/@ericblade/quagga2/dist/quagga.min.js"></script>
+  <script src="https://unpkg.com/@zxing/library@latest"></script>
+
+  <script>
+    const $ = (s)=>document.querySelector(s);
+    const log = (...a)=>{ const L=$("#log"); L.textContent += a.join(" ") + "\n"; };
+    const video = $("#video");
+    const selLib = $("#lib");
+    const selDev = $("#device");
+
+    let adapter = null;
+    let stream = null;
+    let t0=0, t1=0, s0=0, s1=0;
+
+    async function listDevices() {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const vids = devices.filter(d=>d.kind==="videoinput");
+      selDev.innerHTML = "";
+      for (const d of vids) {
+        const opt = document.createElement("option");
+        opt.value = d.deviceId;
+        opt.textContent = d.label || d.deviceId;
+        selDev.appendChild(opt);
+      }
+      if (!vids.length) log("カメラが見つかりません");
+    }
+
+    function getConstraints() {
+      const deviceId = selDev.value || undefined;
+      return {
+        audio: false,
+        video: deviceId ? { deviceId: { exact: deviceId } } : { facingMode: "environment" }
+      };
+    }
+
+    // Adapters
+    const Adapters = {
+      quagga: {
+        async init(videoEl, constraints) {
+          t0 = performance.now();
+          // 先にストリーム確保して video に表示
+          stream = await navigator.mediaDevices.getUserMedia(constraints);
+          videoEl.srcObject = stream; await videoEl.play();
+
+          // Quagga init
+          await new Promise((res, rej)=>{
+            Quagga.init({
+              inputStream: {
+                name: "Live",
+                type: "LiveStream",
+                target: videoEl,
+                constraints: constraints.video
+              },
+              decoder: { readers: ["ean_reader","code_128_reader","code_39_reader","ean_8_reader","upc_reader","itf_reader","codabar_reader","qr_reader"] },
+              locate: true
+            }, (err)=> err ? rej(err) : res());
+          });
+          t1 = performance.now();
+        },
+        async startScan(onResult) {
+          s0 = performance.now();
+          Quagga.offDetected(); // 念のため
+          Quagga.onDetected((res)=>{
+            if (!res || !res.codeResult) return;
+            s1 = performance.now();
+            onResult({ text: res.codeResult.code, format: res.codeResult.format });
+          });
+          Quagga.start();
+        },
+        async stopScan() { Quagga.stop(); },
+        async teardown() {
+          try { Quagga.stop(); } catch {}
+          if (stream) { stream.getTracks().forEach(t=>t.stop()); stream=null; }
+          video.srcObject = null;
+        }
+      },
+      quagga2: {
+        async init(videoEl, constraints) {
+          t0 = performance.now();
+          stream = await navigator.mediaDevices.getUserMedia(constraints);
+          videoEl.srcObject = stream; await videoEl.play();
+          await new Promise((res, rej)=>{
+            window.Quagga2.init({
+              inputStream: {
+                name: "Live",
+                type: "LiveStream",
+                target: videoEl,
+                constraints: constraints.video
+              },
+              decoder: { readers: ["ean_reader","code_128_reader","code_39_reader","ean_8_reader","upc_reader","itf_reader","codabar_reader","qr_reader"] },
+              locate: true
+            }, (err)=> err ? rej(err) : res());
+          });
+          t1 = performance.now();
+        },
+        async startScan(onResult) {
+          s0 = performance.now();
+          window.Quagga2.offDetected();
+          window.Quagga2.onDetected((res)=>{
+            if (!res || !res.codeResult) return;
+            s1 = performance.now();
+            onResult({ text: res.codeResult.code, format: res.codeResult.format });
+          });
+          window.Quagga2.start();
+        },
+        async stopScan() { window.Quagga2.stop(); },
+        async teardown() {
+          try { window.Quagga2.stop(); } catch {}
+          if (stream) { stream.getTracks().forEach(t=>t.stop()); stream=null; }
+          video.srcObject = null;
+        }
+      },
+      zxing: {
+        _reader: null,
+        _running: false,
+        async init(videoEl, constraints) {
+          t0 = performance.now();
+          stream = await navigator.mediaDevices.getUserMedia(constraints);
+          videoEl.srcObject = stream; await videoEl.play();
+          // ZXing reader
+          this._reader = new ZXing.BrowserMultiFormatReader();
+          t1 = performance.now();
+        },
+        async startScan(onResult) {
+          if (this._running) return;
+          this._running = true;
+          s0 = performance.now();
+          // decodeFromVideoElementContinuously は最初のヒットで s1 記録して停止
+          this._reader.decodeFromVideoElementContinuously(video, (result, err) => {
+            if (result) {
+              if (!s1) s1 = performance.now();
+              onResult({ text: result.getText(), format: result.getBarcodeFormat() });
+              // 1回で止める（比較用）
+              this._reader.reset();
+              this._running = false;
+            }
+          });
+        },
+        async stopScan() {
+          if (this._reader) this._reader.reset();
+          this._running = false;
+        },
+        async teardown() {
+          await this.stopScan();
+          if (stream) { stream.getTracks().forEach(t=>t.stop()); stream=null; }
+          video.srcObject = null;
+          this._reader = null;
+        }
+      },
+      // zxing-wasm を使う場合は、WASM/worker のパス設定と init/scan 実装を追加
+    };
+
+    async function ensureAdapter() {
+      const key = selLib.value;
+      return Adapters[key];
+    }
+
+    function printTimes() {
+      if (t0 && t1) {
+        log(`起動時間: ${(t1 - t0).toFixed(1)} ms`);
+      }
+      if (s0 && s1) {
+        log(`認識開始→検出: ${(s1 - s0).toFixed(1)} ms`);
+      }
+    }
+
+    $("#btnInit").onclick = async ()=>{
+      try {
+        if (adapter) await adapter.teardown();
+        adapter = await ensureAdapter();
+        await adapter.init(video, getConstraints());
+        log(`[${selLib.value}] カメラ起動完了`);
+        printTimes();
+      } catch (e) {
+        log("init error:", e);
+      }
+    };
+
+    $("#btnStart").onclick = async ()=>{
+      try {
+        s0 = 0; s1 = 0;
+        await adapter?.startScan((res)=>{
+          log(`検出: ${res.text} (${res.format})`);
+          printTimes();
+        });
+      } catch (e) {
+        log("start error:", e);
+      }
+    };
+
+    $("#btnStop").onclick = async ()=>{
+      try { await adapter?.stopScan(); log("停止"); } catch(e){ log("stop error:", e); }
+    };
+
+    $("#btnTeardown").onclick = async ()=>{
+      try { await adapter?.teardown(); log("解放"); } catch(e){ log("teardown error:", e); }
+    };
+
+    // 初期化: カメラ一覧更新
+    (async ()=>{
+      try {
+        // 一度権限を取らないと label が空のことがある
+        await navigator.mediaDevices.getUserMedia({ video: true, audio: false }).then(s=>s.getTracks().forEach(t=>t.stop()));
+      } catch {}
+      await listDevices();
+    })();
+  </script>
+</body>
+</html>
