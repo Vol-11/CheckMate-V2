@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Quagga vs Quagga2 ベンチマーク</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
-    <script src="https://unpkg.com/@ericblade/quagga2/dist/quagga.min.js"></script>
+    <script src="https://unpkg.com/quagga@latest/dist/quagga.min.js"></script>
+    <script src="https://unpkg.com/@ericblade/quagga2@latest/dist/quagga.min.js"></script>
     <style>
         #interactive video {
             width: 100%;
@@ -56,8 +56,8 @@
                         ライブラリ
                     </label>
                     <select id="librarySelect" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
-                        <option value="quagga">Quagga (v0.12.1)</option>
-                        <option value="quagga2">Quagga2</option>
+                        <option value="quagga">Quagga (latest)</option>
+                        <option value="quagga2">Quagga2 (latest)</option>
                     </select>
                 </div>
                 
@@ -79,9 +79,9 @@
                         バーコードタイプ
                     </label>
                     <select id="barcodeType" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
-                        <option value="code_128">Code 128</option>
-                        <option value="ean_13">EAN-13</option>
+                        <option value="ean">EAN-13</option>
                         <option value="ean_8">EAN-8</option>
+                        <option value="code_128">Code 128</option>
                         <option value="code_39">Code 39</option>
                     </select>
                 </div>
@@ -174,7 +174,7 @@
             <!-- 統計情報 -->
             <div id="statsSection" class="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6 hidden">
                 <div class="bg-yellow-50 p-4 rounded-lg">
-                    <h3 class="font-semibent text-yellow-800 mb-2">平均カメラ起動時間</h3>
+                    <h3 class="font-semibold text-yellow-800 mb-2">平均カメラ起動時間</h3>
                     <p id="avgCameraTime" class="text-xl font-bold text-yellow-600">-- ms</p>
                 </div>
                 <div class="bg-purple-50 p-4 rounded-lg">
@@ -280,6 +280,23 @@
                 return window.Quagga;
             }
             
+            getBarcodeReader() {
+                const barcodeType = this.barcodeType.value;
+                // 正しいリーダー名を返す
+                switch (barcodeType) {
+                    case 'ean':
+                        return 'ean_reader';
+                    case 'ean_8':
+                        return 'ean_8_reader';
+                    case 'code_128':
+                        return 'code_128_reader';
+                    case 'code_39':
+                        return 'code_39_reader';
+                    default:
+                        return 'ean_reader';
+                }
+            }
+            
             async startCamera() {
                 const startTime = performance.now();
                 this.cameraStartTime = startTime;
@@ -293,6 +310,7 @@
                     
                     const resolution = this.getResolution();
                     const QuaggaLib = this.getQuaggaInstance();
+                    const reader = this.getBarcodeReader();
                     
                     // プレースホルダーを隠す
                     const placeholder = document.getElementById('placeholder');
@@ -303,8 +321,7 @@
                     const constraints = {
                         width: { min: resolution.width },
                         height: { min: resolution.height },
-                        facingMode: "environment",
-                        aspectRatio: { min: 1, max: 2 }
+                        facingMode: "environment"
                     };
                     
                     // カメラが選択されている場合はdeviceIdを追加
@@ -321,7 +338,7 @@
                             constraints: constraints
                         },
                         decoder: {
-                            readers: [this.barcodeType.value + "_reader"]
+                            readers: [reader]  // 正しいリーダー名を使用
                         }
                     };
                     
@@ -448,7 +465,7 @@
             saveMeasurement(cameraTime, scanTime, result) {
                 const measurement = {
                     id: this.measurements.length + 1,
-                    library: this.currentLibrary === 'quagga' ? 'Quagga v0.12.1' : 'Quagga2',
+                    library: this.currentLibrary === 'quagga' ? 'Quagga (latest)' : 'Quagga2 (latest)',
                     resolution: this.resolutionSelect.value,
                     cameraTime: cameraTime,
                     scanTime: scanTime,
@@ -512,7 +529,7 @@
                 
                 this.resultsTableBody.innerHTML = `
                     <tr>
-                        <td colspan="7" class="border border-gray-300 px-4 py-2 text-center text-gray-500">
+                        <td colspan="7" class="border border-gray-300 px-4 py-8 text-center text-gray-500">
                             まだ測定結果がありません
                         </td>
                     </tr>
