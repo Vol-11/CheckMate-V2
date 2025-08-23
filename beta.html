@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <title>Barcode Scanner Benchmark - ZXing専用</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- Tailwind CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- ZXing (最新版) CDN -->
+  <script src="https://unpkg.com/@zxing/library@latest/umd/index.min.js"></script>
+</head>
+<body class="bg-white text-gray-900 dark:bg-gray-900 dark:text-gray-100 min-h-screen transition-colors">
+  <div class="max-w-lg mx-auto p-6 space-y-6">
+    <h1 class="text-2xl font-bold flex items-center gap-2">📱 Barcode Scanner Performance Benchmark</h1>
+    <div class="flex flex-wrap gap-4 items-center">
+      <div>
+        <label class="block font-medium mb-1">ライブラリ</label>
+        <span class="inline-flex items-center px-3 py-1 bg-gray-200 dark:bg-gray-700 text-sm rounded">ZXing（最新版・高速・推奨）</span>
+      </div>
+      <div>
+        <label class="block font-medium mb-1" for="device">カメラ</label>
+        <select id="device" class="block w-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded px-3 py-2"></select>
+      </div>
+      <div>
+        <label class="block font-medium mb-1" for="preset">解像度</label>
+        <select id="preset" class="block w-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded px-3 py-2">
+          <option value="480p">854x480 (高速)</option>
+          <option value="720p" selected>1280x720 (標準)</option>
+          <option value="540p">960x540 (バランス)</option>
+        </select>
+      </div>
+      <span class="inline-flex items-center bg-indigo-100 dark:bg-indigo-900 dark:text-indigo-200 text-indigo-800 rounded-full px-3 py-1 text-xs font-semibold">📚 教科書ISBN(EAN-13)最適化済み</span>
+    </div>
+    <div class="flex gap-3 mt-2">
+      <button id="btnInit"     class="tw-btn-primary">🎥 カメラ起動</button>
+      <button id="btnStart"    class="tw-btn-primary" disabled>🔍 認識開始</button>
+      <button id="btnStop"     class="tw-btn-secondary" disabled>⏹️ 停止</button>
+      <button id="btnTeardown" class="tw-btn-secondary" disabled>🗑️ 解放</button>
+      <button id="btnExport"   class="tw-btn-success" disabled>📄 CSV出力</button>
+    </div>
+    <div id="status" class="p-3 rounded text-sm font-semibold bg-blue-100 dark:bg-blue-900 dark:text-blue-200 text-blue-800">ライブラリ読み込み中...</div>
+    <video id="video" class="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-black aspect-video" playsinline muted></video>
+    <div class="text-sm text-gray-600 dark:text-gray-300">
+      📊 <strong>計測項目:</strong><br>
+      ・起動時間: カメラ初期化完了までの時間<br>
+      ・認識時間: 「認識開始」→最初の検出までの時間<br>
+      📖 <strong>対象:</strong> 教科書によくあるISBN（EAN-13、978/979で始まる13桁バーコード）<br>
+      💡 <span class="font-semibold text-indigo-600 dark:text-indigo-300">ZXing が最も高速・安定です</span>
+    </div>
+    <pre id="log" class="bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 min-h-[120px] max-h-[300px] overflow-y-auto text-xs"></pre>
+  </div>
+  <style>
+    /* Tailwind ボタンユーティリティ */
+    .tw-btn-primary { @apply px-3 py-2 rounded text-white bg-blue-600 hover:bg-blue-700 disabled:bg-gray-500 transition; }
+    .tw-btn-secondary { @apply px-3 py-2 rounded text-gray-700 dark:text-gray-200 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 disabled:bg-gray-500 transition; }
+    .tw-btn-success { @apply px-3 py-2 rounded text-white bg-green-600 hover:bg-green-700 disabled:bg-gray-500 transition; }
+  </style>
+  <script>
+    // Utility
+    const $ = s => document.querySelector(s);
+    const video = $("#video");
+    const logView = $("#log");
+    const statusView = $("#status");
+    const btnInit = $("#btnInit");
+    const btnStart = $("#btnStart");
+    const btnStop = $("#btnStop");
+    const btnTeardown = $("#btnTeardown");
+    const btnExport = $("#btnExport");
+    let currentAdapter = null;
+    let currentStream = null;
+    let t0 = 0, t1 = 0, s0 = 0, s1 = 0;
+    const results = [];
+
+    // アダプター：ZXing専用
+    const ZXingAdapter = {
+      reader: null,
+      scanning: false,
+      async init() {
+        if (typeof window.ZXing === 'undefined') throw new Error('ZXingライブラリが読み込めませんでした（ネットワーク/CORS/CDN等を確認）');
+        t0 = performance.now();
+        const constraints = getMediaConstraints();
+        currentStream = await navigator.mediaDevices.getUserMedia(constraints);
+        video.srcObject = currentStream;
+        await safePlayVideo(video);
+        const hints = new Map();
+        hints.set(window.ZXing.DecodeHintType.POSSIBLE_FORMATS, [window.ZXing.BarcodeFormat.EAN_13]);
+        hints.set(window.ZXing.DecodeHintType.TRY_HARDER, false);
+        this.reader = new window.ZXing.BrowserMultiFormatReader(hints);
+        t1 = performance.now();
+        log(`✅ ZXing初期化完了 (${(t1-t0).toFixed(1)}ms) - EAN-13特化モード`);
+      },
+      async startScan(onDetected) {
+        if (this.scanning || !this.reader) return;
+        this.scanning = true;
+        s0 = performance.now();
+        this.reader.decodeFromVideoElementContinuously(video, (result, err) => {
+          if (result && this.scanning) {
+            s1 = performance.now();
+            const text = result.getText();
+            const format = result.getBarcodeFormat();
+            const isISBN = /^97[89]\d{10}$/.test(text);
+            log(`🎯 検出: ${text} ${isISBN ? '📚(ISBN)' : '📦(一般EAN)'}`);
+            onDetected({ text, format, isISBN });
+            this.stopScan();
+          }
+        });
+      },
+      async stopScan() {
+        this.reader && this.reader.reset();
+        this.scanning = false;
+      },
+      async cleanup() {
+        await this.stopScan();
+        this.reader = null;
+        if (currentStream) {
+          currentStream.getTracks().forEach(track => track.stop());
+          currentStream = null;
+        }
+        video.srcObject = null;
+      }
+    };
+
+    // 共通UI・ロジック
+    function log(...args) {
+      const timestamp = new Date().toLocaleTimeString();
+      const message = args.join(" ");
+      logView.textContent += `[${timestamp}] ${message}\n`;
+      logView.scrollTop = logView.scrollHeight;
+      console.log(...args);
+    }
+    function setStatus(message, color="blue") {
+      const map = {
+        blue: { bg: 'bg-blue-100 dark:bg-blue-900 dark:text-blue-200 text-blue-800' },
+        green: { bg: 'bg-green-100 dark:bg-green-900 dark:text-green-200 text-green-800' },
+        yellow: { bg: 'bg-yellow-100 dark:bg-yellow-900 dark:text-yellow-200 text-yellow-800' },
+        red: { bg: 'bg-red-100 dark:bg-red-900 dark:text-red-200 text-red-800' }
+      };
+      statusView.className = "p-3 rounded text-sm font-semibold " + (map[color]?.bg || map.blue.bg);
+      statusView.textContent = message;
+    }
+    function updateButtons(state) {
+      const enable = (b, v) => b.disabled = !v;
+      if (state === 'idle') {
+        enable(btnInit, true); enable(btnStart, false); enable(btnStop, false); enable(btnTeardown, false); enable(btnExport, results.length);
+      } else if (state === 'ready') {
+        enable(btnInit, false); enable(btnStart, true); enable(btnStop, false); enable(btnTeardown, true); enable(btnExport, results.length);
+      } else if (state === 'scanning') {
+        enable(btnInit, false); enable(btnStart, false); enable(btnStop, true); enable(btnTeardown, false); enable(btnExport, true);
+      }
+    }
+    function getMediaConstraints() {
+      const deviceId = $("#device").value;
+      const preset = $("#preset").value;
+      const resolutions = {
+        "480p": {width:854, height:480},
+        "540p": {width:960, height:540},
+        "720p": {width:1280, height:720}
+      };
+      const res = resolutions[preset] || resolutions["720p"];
+      return {
+        audio: false,
+        video: {
+          ...(deviceId ? {deviceId:{exact:deviceId}} : {facingMode:"environment"}), 
+          width: {ideal: res.width},
+          height: {ideal: res.height},
+          frameRate: {ideal: 30}
+        }
+      };
+    }
+    async function safePlayVideo(videoElement) {
+      try {
+        if (videoElement.readyState >= 2) {
+          if (!videoElement.paused) return;
+        }
+        await videoElement.play();
+      } catch (error) {
+        if (error.name !== 'AbortError') throw error;
+      }
+    }
+    async function updateDeviceList() {
+      try {
+        const tempStream = await navigator.mediaDevices.getUserMedia({video: true});
+        tempStream.getTracks().forEach(track => track.stop());
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const cameras = devices.filter(d => d.kind==="videoinput");
+        const select = $("#device");
+        select.innerHTML = "";
+        cameras.forEach(camera => {
+          const option = document.createElement("option");
+          option.value = camera.deviceId;
+          option.textContent = camera.label || `カメラ ${camera.deviceId.slice(0,8)}`;
+          select.appendChild(option);
+        });
+        log(`${cameras.length ? `📷 ${cameras.length}台のカメラを検出`: "⚠️ カメラが見つかりません"}`);
+      } catch (e) {
+        log("⚠️ カメラアクセス権限が必要です:", e.message);
+      }
+    }
+    function recordMeasurement(data) {
+      const record = {
+        timestamp: new Date().toISOString(),
+        library: "zxing",
+        device: $("#device").selectedOptions[0]?.textContent || "unknown",
+        preset: $("#preset").value,
+        ...data
+      };
+      results.push(record);
+      updateButtons(currentAdapter ? "ready" : "idle");
+    }
+    function exportResults() {
+      if (!results.length) {
+        log("⚠️ 出力可能な結果がありません"); return;
+      }
+      const headers = ["timestamp","library","device","preset","init_time_ms","scan_time_ms","detected_text","format","is_isbn"];
+      const csv = [
+        headers.join(","),
+        ...results.map(r => [
+          r.timestamp,
+          r.library,
+          `"${r.device}"`,
+          r.preset,
+          r.init_time_ms||"",
+          r.scan_time_ms||"",
+          `"${r.detected_text||""}"`,
+          r.format||"",
+          r.is_isbn||false
+        ].join(","))
+      ].join("\n");
+      const blob = new Blob([csv],{type:"text/csv;charset=utf-8"});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `barcode_benchmark_${new Date().toISOString().slice(0,19).replace(/:/g,"-")}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      log(`📄 ${results.length}件の結果をCSVでエクスポートしました`);
+    }
+    // イベントハンドラ
+    btnInit.onclick = async () => {
+      try {
+        setStatus("初期化中...", "yellow"); updateButtons("idle");
+        if (currentAdapter) await currentAdapter.cleanup();
+        currentAdapter = ZXingAdapter; t0=t1=s0=s1=0;
+        await currentAdapter.init();
+        setStatus("ZXingカメラ準備完了 - 認識開始ボタンを押してください", "green");
+        updateButtons("ready");
+        recordMeasurement({init_time_ms:(t1-t0).toFixed(1),scan_time_ms:"",detected_text:"",format:"",is_isbn:false});
+      } catch (e) {
+        log("❌ 初期化エラー:", e.message); setStatus("初期化失敗", "red"); updateButtons("idle");
+      }
+    };
+    btnStart.onclick = async () => {
+      if (!currentAdapter) return;
+      try {
+        setStatus("📱 スキャン中 - バーコードをカメラに向けてください", "yellow");
+        updateButtons("scanning"); s0=s1=0;
+        await currentAdapter.startScan((result) => {
+          const scanTime = s1-s0;
+          log(`⚡ 認識完了: ${scanTime.toFixed(1)}ms で検出`);
+          setStatus(`✅ 検出完了: ${result.text}`, "green"); updateButtons("ready");
+          recordMeasurement({
+            init_time_ms: (t1-t0).toFixed(1),
+            scan_time_ms: scanTime.toFixed(1),
+            detected_text: result.text,
+            format: result.format,
+            is_isbn: result.isISBN||false
+          });
+        });
+      } catch (e) {
+        log("❌ スキャンエラー:", e.message); setStatus("スキャン失敗", "red"); updateButtons("ready");
+      }
+    };
+    btnStop.onclick = async () => {
+      if (currentAdapter) {
+        await currentAdapter.stopScan();
+        setStatus("スキャン停止", "blue"); updateButtons("ready"); log("⏹️ スキャンを停止しました");
+      }
+    };
+    btnTeardown.onclick = async () => {
+      if (currentAdapter) {
+        await currentAdapter.cleanup();
+        currentAdapter = null;
+        setStatus("解放完了 - 新しいテストが可能です", "blue"); updateButtons("idle"); log("🗑️ リソースを解放しました");
+      }
+    };
+    btnExport.onclick = exportResults;
+    window.addEventListener('load', async () => {
+      try {
+        await new Promise(r => setTimeout(r, 100));
+        if (typeof window.ZXing === 'undefined') throw new Error('ZXingライブラリの読み込み失敗');
+        await updateDeviceList();
+        log("🚀 アプリケーション準備完了");
+        log("📖 使用方法: 1.カメラ選択 2.解像度選択 3.カメラ起動 → 認識開始");
+        log("📚 ISBN対応: 978/979で始まる13桁バーコードを検出します");
+        setStatus("準備完了 - カメラを起動してください", "blue");
+        updateButtons("idle");
+      } catch (e) {
+        log("❌ 初期化エラー:", e.message); setStatus("初期化エラー - ページを再読み込みしてください", "red");
+      }
+    });
+  </script>
+</body>
+</html>
