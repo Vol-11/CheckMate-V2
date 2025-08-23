@@ -490,7 +490,7 @@
 
 </div>
 
-<script type="text/javascript" src="https://unpkg.com/@zxing/browser@latest"></script>
+
 <script src="js/dark_mode.js"></script>
 <script src="js/indexdb.js"></script>
 <script src="js/global.js"></script>
@@ -509,6 +509,9 @@
 <script src="js/stats_util.js"></script>
 <script src="js/forgotten.js"></script>
 <script src="js/notifications.js"></script>
+<script type="text/javascript" src="https://unpkg.com/@zxing/library@latest/umd/index.min.js"></script>
+<script type="text/javascript" src="https://unpkg.com/@zxing/browser@latest"></script>
+
 <script>
 window.addEventListener('load', () => {
 // 詳細登録
@@ -558,13 +561,13 @@ const checkStatusMessage = document.getElementById('check-status');
 let animationFrameId;
 let checkAnimationFrameId;
 
-const codeReader = new ZXing.BrowserMultiFormatReader();
+const codeReader = new ZXingBrowser.BrowserMultiFormatReader();
 let selectedDeviceId = undefined;
 let checkSelectedDeviceId = undefined;
 let scanControls = null;
 let checkScanControls = null;
 
-ZXing.BrowserMultiFormatReader.listVideoInputDevices()
+ZXingBrowser.BrowserMultiFormatReader.listVideoInputDevices()
   .then((videoInputDevices) => {
     if (videoInputDevices.length > 0) {
       // 複数のカメラがある場合、ここでユーザーに選択させることも可能
@@ -709,7 +712,15 @@ async function startScanning() {
                 console.log('startScanning: barcode detected', result);
                 onDetected(result);
             }
-            if (err && !(err instanceof ZXing.NotFoundException)) {
+            if (err) {
+                // バーコードが見つからない場合は正常な動作なので無視
+                if (err.message?.includes('No MultiFormat Readers') ||
+                    err.name?.includes('NotFoundException') ||
+                    err.message?.includes('NotFoundException')) {
+                    return; // 無視して続行
+                }
+
+                // その他の実際のエラーの場合のみ処理を停止
                 console.error('startScanning: decode error', err);
                 statusMessage.textContent = `❌ エラー: ${err.message}`;
                 stopScanning();
@@ -733,7 +744,6 @@ function stopScanning() {
         scanControls = null;
         console.log('stopScanning: scanControls.stop() called');
     }
-    codeReader.reset(); // stop()の後でreset()を呼ぶ
     console.log('stopScanning: codeReader reset');
 
     isScanning = false;
@@ -763,10 +773,18 @@ async function startCheckScanning() {
                 console.log('startCheckScanning: barcode detected', result);
                 onCheckDetected(result);
             }
-            if (err && !(err instanceof ZXing.NotFoundException)) {
-                console.error('startCheckScanning: decode error', err);
-                checkStatusMessage.textContent = `❌ エラー: ${err.message}`;
-                stopCheckScanning();
+            if (err) {
+                // バーコードが見つからない場合は正常な動作なので無視
+                if (err.message?.includes('No MultiFormat Readers') ||
+                    err.name?.includes('NotFoundException') ||
+                    err.message?.includes('NotFoundException')) {
+                    return; // 無視して続行
+                }
+
+                // その他の実際のエラーの場合のみ処理を停止
+                console.error('startScanning: decode error', err);
+                statusMessage.textContent = `❌ エラー: ${err.message}`;
+                stopScanning();
             }
         });
         console.log('startCheckScanning: ZXing decoding started');
@@ -787,7 +805,6 @@ function stopCheckScanning() {
         checkScanControls = null;
         console.log('stopCheckScanning: checkScanControls.stop() called');
     }
-    codeReader.reset(); // stop()の後でreset()を呼ぶ
     console.log('stopCheckScanning: codeReader reset');
 
     isCheckScanning = false;
@@ -998,7 +1015,6 @@ document.getElementById('import-file').addEventListener('change', async e => {
   reader.readAsText(file);
   e.target.value = '';
 });
-
 
 
 
