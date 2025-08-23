@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quagga vs Quagga2 vs ZXing ベンチマーク</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/quagga@latest/dist/quagga.min.js"></script>
+    <script src="https://unpkg.com/@ericblade/quagga2@latest/dist/quagga.min.js"></script>
+    <script src="https://unpkg.com/@zxing/library@latest"></script>
+    <style>
+        #interactive video {
+            width: 100%;
+            max-width: 640px;
+            height: auto;
+        }
+        #interactive canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+        .viewport {
+            position: relative;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen py-8">
+    <div class="container mx-auto px-4 max-w-4xl">
+        <h1 class="text-3xl font-bold text-center text-gray-800 mb-8">
+            Quagga vs Quagga2 vs ZXing ベンチマーク
+        </h1>
+        
+        <!-- HTTPS警告 -->
+        <div id="httpsWarning" class="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6 hidden">
+            <div class="flex">
+                <div class="flex-shrink-0">
+                    <svg class="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+                    </svg>
+                </div>
+                <div class="ml-3">
+                    <p class="text-sm text-yellow-700">
+                        カメラアクセスにはHTTPS接続が必要です。localhostまたはHTTPS環境でご利用ください。
+                    </p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 設定パネル -->
+        <div class="bg-white rounded-lg shadow-lg p-6 mb-6">
+            <h2 class="text-xl font-semibold mb-4">設定</h2>
+            
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                <!-- ライブラリ選択 -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        ライブラリ
+                    </label>
+                    <select id="librarySelect" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="quagga">Quagga (latest)</option>
+                        <option value="quagga2">Quagga2 (latest)</option>
+                        <option value="zxing">ZXing (latest)</option>
+                    </select>
+                </div>
+                
+                <!-- 解像度選択 -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        解像度
+                    </label>
+                    <select id="resolutionSelect" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="640x480">640x480</option>
+                        <option value="800x600">800x600</option>
+                        <option value="1280x720">1280x720 (HD)</option>
+                    </select>
+                </div>
+                
+                <!-- バーコードタイプ -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        バーコードタイプ
+                    </label>
+                    <select id="barcodeType" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="ean">EAN-13</option>
+                        <option value="ean_8">EAN-8</option>
+                        <option value="code_128">Code 128</option>
+                        <option value="code_39">Code 39</option>
+                    </select>
+                </div>
+                
+                <!-- カメラ選択 -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        カメラ
+                    </label>
+                    <select id="cameraSelect" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="">デフォルト</option>
+                    </select>
+                </div>
+            </div>
+            
+            <!-- 操作ボタン -->
+            <div class="flex flex-wrap gap-4">
+                <button id="startCamera" class="bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded-lg transition duration-200">
+                    カメラ開始
+                </button>
+                <button id="stopCamera" class="bg-red-500 hover:bg-red-600 text-white px-6 py-2 rounded-lg transition duration-200" disabled>
+                    カメラ停止
+                </button>
+                <button id="scanBarcode" class="bg-green-500 hover:bg-green-600 text-white px-6 py-2 rounded-lg transition duration-200" disabled>
+                    スキャン実行
+                </button>
+                <button id="resetResults" class="bg-gray-500 hover:bg-gray-600 text-white px-6 py-2 rounded-lg transition duration-200">
+                    結果リセット
+                </button>
+            </div>
+        </div>
+        
+        <!-- カメラプレビュー -->
+        <div class="bg-white rounded-lg shadow-lg p-6 mb-6">
+            <h2 class="text-xl font-semibold mb-4">カメラプレビュー</h2>
+            <div class="flex justify-center">
+                <div id="interactive" class="viewport border-2 border-gray-300 rounded-lg overflow-hidden" 
+                     style="width: 100%; max-width: 640px; height: 480px; position: relative;">
+                    <video id="zxingVideo" style="width: 100%; height: 100%; object-fit: cover; display: none;"></video>
+                    <div class="flex items-center justify-center h-full text-gray-500" id="placeholder">
+                        カメラを開始してください
+                    </div>
+                </div>
+            </div>
+            <div id="result" class="mt-4 p-4 bg-gray-50 rounded-lg hidden">
+                <h3 class="font-semibold text-lg mb-2">スキャン結果:</h3>
+                <p id="resultText" class="text-green-600 font-mono"></p>
+            </div>
+        </div>
+        
+        <!-- ベンチマーク結果 -->
+        <div class="bg-white rounded-lg shadow-lg p-6">
+            <h2 class="text-xl font-semibold mb-4">ベンチマーク結果</h2>
+            
+            <!-- 現在の測定値 -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                <div class="bg-blue-50 p-4 rounded-lg">
+                    <h3 class="font-semibold text-blue-800 mb-2">カメラ起動時間</h3>
+                    <p id="cameraStartTime" class="text-2xl font-bold text-blue-600">-- ms</p>
+                </div>
+                <div class="bg-green-50 p-4 rounded-lg">
+                    <h3 class="font-semibold text-green-800 mb-2">スキャン認識時間</h3>
+                    <p id="scanTime" class="text-2xl font-bold text-green-600">-- ms</p>
+                </div>
+            </div>
+            
+            <!-- 測定履歴テーブル -->
+            <div class="overflow-x-auto">
+                <table class="w-full border-collapse border border-gray-300">
+                    <thead>
+                        <tr class="bg-gray-50">
+                            <th class="border border-gray-300 px-4 py-2 text-left">No.</th>
+                            <th class="border border-gray-300 px-4 py-2 text-left">ライブラリ</th>
+                            <th class="border border-gray-300 px-4 py-2 text-left">解像度</th>
+                            <th class="border border-gray-300 px-4 py-2 text-left">カメラ起動時間</th>
+                            <th class="border border-gray-300 px-4 py-2 text-left">スキャン時間</th>
+                            <th class="border border-gray-300 px-4 py-2 text-left">結果</th>
+                            <th class="border border-gray-300 px-4 py-2 text-left">時刻</th>
+                        </tr>
+                    </thead>
+                    <tbody id="resultsTableBody">
+                        <tr>
+                            <td colspan="7" class="border border-gray-300 px-4 py-8 text-center text-gray-500">
+                                まだ測定結果がありません
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            
+            <!-- 統計情報 -->
+            <div id="statsSection" class="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6 hidden">
+                <div class="bg-yellow-50 p-4 rounded-lg">
+                    <h3 class="font-semibold text-yellow-800 mb-2">平均カメラ起動時間</h3>
+                    <p id="avgCameraTime" class="text-xl font-bold text-yellow-600">-- ms</p>
+                </div>
+                <div class="bg-purple-50 p-4 rounded-lg">
+                    <h3 class="font-semibold text-purple-800 mb-2">平均スキャン時間</h3>
+                    <p id="avgScanTime" class="text-xl font-bold text-purple-600">-- ms</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        class BarcodeLibraryBenchmark {
+            constructor() {
+                this.isScanning = false;
+                this.currentLibrary = 'quagga';
+                this.measurements = [];
+                this.cameraStartTime = 0;
+                this.scanStartTime = 0;
+                this.availableCameras = [];
+                this.scanDetectedHandler = null;
+                this.zxingCodeReader = null;
+                
+                this.checkHttps();
+                this.initializeElements();
+                this.attachEventListeners();
+                this.enumerateCameras();
+            }
+            
+            checkHttps() {
+                if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+                    document.getElementById('httpsWarning').classList.remove('hidden');
+                }
+            }
+            
+            initializeElements() {
+                this.librarySelect = document.getElementById('librarySelect');
+                this.resolutionSelect = document.getElementById('resolutionSelect');
+                this.barcodeType = document.getElementById('barcodeType');
+                this.cameraSelect = document.getElementById('cameraSelect');
+                this.startCameraBtn = document.getElementById('startCamera');
+                this.stopCameraBtn = document.getElementById('stopCamera');
+                this.scanBarcodeBtn = document.getElementById('scanBarcode');
+                this.resetResultsBtn = document.getElementById('resetResults');
+                this.cameraStartTimeEl = document.getElementById('cameraStartTime');
+                this.scanTimeEl = document.getElementById('scanTime');
+                this.resultEl = document.getElementById('result');
+                this.resultTextEl = document.getElementById('resultText');
+                this.resultsTableBody = document.getElementById('resultsTableBody');
+                this.statsSection = document.getElementById('statsSection');
+                this.avgCameraTime = document.getElementById('avgCameraTime');
+                this.avgScanTime = document.getElementById('avgScanTime');
+                this.zxingVideo = document.getElementById('zxingVideo');
+            }
+            
+            attachEventListeners() {
+                this.startCameraBtn.addEventListener('click', () => this.startCamera());
+                this.stopCameraBtn.addEventListener('click', () => this.stopCamera());
+                this.scanBarcodeBtn.addEventListener('click', () => this.performScan());
+                this.resetResultsBtn.addEventListener('click', () => this.resetResults());
+                this.librarySelect.addEventListener('change', () => this.updateLibrary());
+            }
+            
+            async enumerateCameras() {
+                try {
+                    // カメラアクセス許可を取得
+                    await navigator.mediaDevices.getUserMedia({ video: true }).then(stream => {
+                        stream.getTracks().forEach(track => track.stop());
+                    });
+                    
+                    const devices = await navigator.mediaDevices.enumerateDevices();
+                    this.availableCameras = devices.filter(device => device.kind === 'videoinput');
+                    
+                    this.cameraSelect.innerHTML = '<option value="">デフォルト</option>';
+                    
+                    this.availableCameras.forEach((camera, index) => {
+                        const option = document.createElement('option');
+                        option.value = camera.deviceId;
+                        option.textContent = camera.label || `カメラ ${index + 1}`;
+                        this.cameraSelect.appendChild(option);
+                    });
+                    
+                } catch (error) {
+                    console.error('カメラの列挙に失敗:', error);
+                    this.cameraSelect.innerHTML = '<option value="">カメラアクセスが拒否されました</option>';
+                }
+            }
+            
+            updateLibrary() {
+                this.currentLibrary = this.librarySelect.value;
+                if (this.isScanning) {
+                    this.stopCamera();
+                }
+            }
+            
+            getResolution() {
+                const resolution = this.resolutionSelect.value;
+                const [width, height] = resolution.split('x').map(Number);
+                return { width, height };
+            }
+            
+            getQuaggaInstance() {
+                if (this.currentLibrary === 'quagga2') {
+                    return window.Quagga2 || window.Quagga;
+                }
+                return window.Quagga;
+            }
+            
+            getBarcodeReader() {
+                const barcodeType = this.barcodeType.value;
+                switch (barcodeType) {
+                    case 'ean':
+                        return 'ean_reader';
+                    case 'ean_8':
+                        return 'ean_8_reader';
+                    case 'code_128':
+                        return 'code_128_reader';
+                    case 'code_39':
+                        return 'code_39_reader';
+                    default:
+                        return 'ean_reader';
+                }
+            }
+            
+            getZXingFormat() {
+                const barcodeType = this.barcodeType.value;
+                switch (barcodeType) {
+                    case 'ean':
+                        return ZXing.BarcodeFormat.EAN_13;
+                    case 'ean_8':
+                        return ZXing.BarcodeFormat.EAN_8;
+                    case 'code_128':
+                        return ZXing.BarcodeFormat.CODE_128;
+                    case 'code_39':
+                        return ZXing.BarcodeFormat.CODE_39;
+                    default:
+                        return ZXing.BarcodeFormat.EAN_13;
+                }
+            }
+            
+            async startCamera() {
+                const startTime = performance.now();
+                this.cameraStartTime = startTime;
+                
+                try {
+                    // 既存のスキャナーを停止
+                    if (this.isScanning) {
+                        this.stopCamera();
+                        await new Promise(resolve => setTimeout(resolve, 500));
+                    }
+                    
+                    const resolution = this.getResolution();
+                    
+                    // プレースホルダーを隠す
+                    const placeholder = document.getElementById('placeholder');
+                    if (placeholder) {
+                        placeholder.style.display = 'none';
+                    }
+                    
+                    if (this.currentLibrary === 'zxing') {
+                        await this.startZXingCamera(startTime, resolution);
+                    } else {
+                        await this.startQuaggaCamera(startTime, resolution);
+                    }
+                    
+                } catch (error) {
+                    console.error('カメラ開始エラー:', error);
+                    alert('カメラの開始に失敗しました: ' + error.message);
+                    this.isScanning = false;
+                    this.updateButtonStates();
+                    
+                    // プレースホルダーを再表示
+                    const placeholder = document.getElementById('placeholder');
+                    if (placeholder) {
+                        placeholder.style.display = 'flex';
+                    }
+                }
+            }
+            
+            async startZXingCamera(startTime, resolution) {
+                this.zxingCodeReader = new ZXing.BrowserMultiFormatReader();
+                
+                // ZXingビデオを表示
+                this.zxingVideo.style.display = 'block';
+                
+                // カメラストリームを開始
+                const selectedDeviceId = this.cameraSelect.value || undefined;
+                
+                const constraints = {
+                    video: {
+                        width: { min: resolution.width },
+                        height: { min: resolution.height },
+                        facingMode: selectedDeviceId ? undefined : "environment",
+                        deviceId: selectedDeviceId ? { exact: selectedDeviceId } : undefined
+                    }
+                };
+                
+                const stream = await navigator.mediaDevices.getUserMedia(constraints);
+                this.zxingVideo.srcObject = stream;
+                await this.zxingVideo.play();
+                
+                const endTime = performance.now();
+                const cameraTime = Math.round(endTime - startTime);
+                this.cameraStartTimeEl.textContent = cameraTime + ' ms';
+                
+                this.isScanning = true;
+                this.updateButtonStates();
+            }
+            
+            async startQuaggaCamera(startTime, resolution) {
+                const QuaggaLib = this.getQuaggaInstance();
+                const reader = this.getBarcodeReader();
+                
+                // Quaggaビデオを非表示
+                this.zxingVideo.style.display = 'none';
+                
+                const constraints = {
+                    width: { min: resolution.width },
+                    height: { min: resolution.height },
+                    facingMode: "environment"
+                };
+                
+                // カメラが選択されている場合はdeviceIdを追加
+                if (this.cameraSelect.value) {
+                    constraints.deviceId = { exact: this.cameraSelect.value };
+                    delete constraints.facingMode;
+                }
+                
+                const config = {
+                    inputStream: {
+                        name: "Live",
+                        type: "LiveStream",
+                        target: document.querySelector('#interactive'),
+                        constraints: constraints
+                    },
+                    decoder: {
+                        readers: [reader]
+                    }
+                };
+                
+                await new Promise((resolve, reject) => {
+                    QuaggaLib.init(config, (err) => {
+                        if (err) {
+                            console.error('Quagga初期化エラー:', err);
+                            reject(err);
+                            return;
+                        }
+                        
+                        try {
+                            QuaggaLib.start();
+                            
+                            const endTime = performance.now();
+                            const cameraTime = Math.round(endTime - startTime);
+                            this.cameraStartTimeEl.textContent = cameraTime + ' ms';
+                            
+                            this.isScanning = true;
+                            this.updateButtonStates();
+                            resolve();
+                        } catch (startError) {
+                            console.error('Quagga開始エラー:', startError);
+                            reject(startError);
+                        }
+                    });
+                });
+            }
+            
+            stopCamera() {
+                try {
+                    if (this.currentLibrary === 'zxing') {
+                        // ZXingの停止
+                        if (this.zxingCodeReader) {
+                            this.zxingCodeReader.reset();
+                            this.zxingCodeReader = null;
+                        }
+                        
+                        // ビデオストリームを停止
+                        if (this.zxingVideo.srcObject) {
+                            this.zxingVideo.srcObject.getTracks().forEach(track => track.stop());
+                            this.zxingVideo.srcObject = null;
+                        }
+                        this.zxingVideo.style.display = 'none';
+                        
+                    } else {
+                        // QuaggaまたはQuagga2の停止
+                        const QuaggaLib = this.getQuaggaInstance();
+                        
+                        if (this.isScanning) {
+                            // 検出イベントハンドラーをクリア
+                            if (this.scanDetectedHandler) {
+                                QuaggaLib.offDetected(this.scanDetectedHandler);
+                                this.scanDetectedHandler = null;
+                            }
+                            
+                            QuaggaLib.stop();
+                        }
+                    }
+                } catch (error) {
+                    console.error('カメラ停止エラー:', error);
+                } finally {
+                    this.isScanning = false;
+                    this.updateButtonStates();
+                    
+                    // プレースホルダーを再表示
+                    const placeholder = document.getElementById('placeholder');
+                    if (placeholder) {
+                        placeholder.style.display = 'flex';
+                    }
+                }
+            }
+            
+            async performScan() {
+                if (!this.isScanning) {
+                    alert('最初にカメラを開始してください');
+                    return;
+                }
+                
+                this.scanStartTime = performance.now();
+                this.scanTimeEl.textContent = '測定中...';
+                
+                try {
+                    if (this.currentLibrary === 'zxing') {
+                        await this.performZXingScan();
+                    } else {
+                        await this.performQuaggaScan();
+                    }
+                } catch (error) {
+                    console.error('スキャンエラー:', error);
+                    this.scanTimeEl.textContent = 'エラー';
+                }
+            }
+            
+            async performZXingScan() {
+                if (!this.zxingCodeReader) {
+                    throw new Error('ZXing code reader not initialized');
+                }
+                
+                // 形式を指定してヒントを作成
+                const hints = new Map();
+                hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [this.getZXingFormat()]);
+                
+                try {
+                    const result = await this.zxingCodeReader.decodeOnceFromVideoDevice(
+                        this.cameraSelect.value || undefined,
+                        'zxingVideo',
+                        hints
+                    );
+                    
+                    const endTime = performance.now();
+                    const scanTime = Math.round(endTime - this.scanStartTime);
+                    const cameraTime = Math.round(this.scanStartTime - this.cameraStartTime);
+                    
+                    this.scanTimeEl.textContent = scanTime + ' ms';
+                    this.resultEl.classList.remove('hidden');
+                    this.resultTextEl.textContent = result.text;
+                    
+                    // 測定結果を保存
+                    this.saveMeasurement(cameraTime, scanTime, result.text);
+                    
+                } catch (error) {
+                    if (error instanceof ZXing.NotFoundException) {
+                        setTimeout(() => {
+                            if (this.scanTimeEl.textContent === '測定中...') {
+                                this.scanTimeEl.textContent = 'バーコードが見つかりません';
+                            }
+                        }, 5000);
+                    } else {
+                        throw error;
+                    }
+                }
+            }
+            
+            async performQuaggaScan() {
+                const QuaggaLib = this.getQuaggaInstance();
+                
+                // 既存のリスナーをクリア
+                if (this.scanDetectedHandler) {
+                    QuaggaLib.offDetected(this.scanDetectedHandler);
+                }
+                
+                // 一回限りの検出イベントリスナーを設定
+                this.scanDetectedHandler = (result) => {
+                    const endTime = performance.now();
+                    const scanTime = Math.round(endTime - this.scanStartTime);
+                    const cameraTime = Math.round(this.scanStartTime - this.cameraStartTime);
+                    
+                    this.scanTimeEl.textContent = scanTime + ' ms';
+                    this.resultEl.classList.remove('hidden');
+                    this.resultTextEl.textContent = result.codeResult.code;
+                    
+                    // 測定結果を保存
+                    this.saveMeasurement(cameraTime, scanTime, result.codeResult.code);
+                    
+                    // イベントリスナーを削除
+                    QuaggaLib.offDetected(this.scanDetectedHandler);
+                    this.scanDetectedHandler = null;
+                };
+                
+                QuaggaLib.onDetected(this.scanDetectedHandler);
+                
+                // 30秒でタイムアウト
+                setTimeout(() => {
+                    if (this.scanTimeEl.textContent === '測定中...') {
+                        this.scanTimeEl.textContent = 'タイムアウト';
+                        if (this.scanDetectedHandler) {
+                            QuaggaLib.offDetected(this.scanDetectedHandler);
+                            this.scanDetectedHandler = null;
+                        }
+                    }
+                }, 30000);
+            }
+            
+            saveMeasurement(cameraTime, scanTime, result) {
+                let libraryName;
+                switch (this.currentLibrary) {
+                    case 'quagga':
+                        libraryName = 'Quagga (latest)';
+                        break;
+                    case 'quagga2':
+                        libraryName = 'Quagga2 (latest)';
+                        break;
+                    case 'zxing':
+                        libraryName = 'ZXing (latest)';
+                        break;
+                    default:
+                        libraryName = this.currentLibrary;
+                }
+                
+                const measurement = {
+                    id: this.measurements.length + 1,
+                    library: libraryName,
+                    resolution: this.resolutionSelect.value,
+                    cameraTime: cameraTime,
+                    scanTime: scanTime,
+                    result: result,
+                    timestamp: new Date().toLocaleString('ja-JP')
+                };
+                
+                this.measurements.push(measurement);
+                this.updateResultsTable();
+                this.updateStatistics();
+            }
+            
+            updateResultsTable() {
+                if (this.measurements.length === 0) return;
+                
+                const tbody = this.resultsTableBody;
+                tbody.innerHTML = '';
+                
+                this.measurements.forEach(measurement => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td class="border border-gray-300 px-4 py-2">${measurement.id}</td>
+                        <td class="border border-gray-300 px-4 py-2">${measurement.library}</td>
+                        <td class="border border-gray-300 px-4 py-2">${measurement.resolution}</td>
+                        <td class="border border-gray-300 px-4 py-2">${measurement.cameraTime} ms</td>
+                        <td class="border border-gray-300 px-4 py-2">${measurement.scanTime} ms</td>
+                        <td class="border border-gray-300 px-4 py-2 font-mono text-sm">${measurement.result}</td>
+                        <td class="border border-gray-300 px-4 py-2 text-sm">${measurement.timestamp}</td>
+                    `;
+                    tbody.appendChild(row);
+                });
+            }
+            
+            updateStatistics() {
+                if (this.measurements.length === 0) return;
+                
+                const avgCamera = Math.round(
+                    this.measurements.reduce((sum, m) => sum + m.cameraTime, 0) / this.measurements.length
+                );
+                const avgScan = Math.round(
+                    this.measurements.reduce((sum, m) => sum + m.scanTime, 0) / this.measurements.length
+                );
+                
+                this.avgCameraTime.textContent = avgCamera + ' ms';
+                this.avgScanTime.textContent = avgScan + ' ms';
+                this.statsSection.classList.remove('hidden');
+            }
+            
+            updateButtonStates() {
+                this.startCameraBtn.disabled = this.isScanning;
+                this.stopCameraBtn.disabled = !this.isScanning;
+                this.scanBarcodeBtn.disabled = !this.isScanning;
+            }
+            
+            resetResults() {
+                this.measurements = [];
+                this.cameraStartTimeEl.textContent = '-- ms';
+                this.scanTimeEl.textContent = '-- ms';
+                this.resultEl.classList.add('hidden');
+                this.statsSection.classList.add('hidden');
+                
+                this.resultsTableBody.innerHTML = `
+                    <tr>
+                        <td colspan="7" class="border border-gray-300 px-4 py-8 text-center text-gray-500">
+                            まだ測定結果がありません
+                        </td>
+                    </tr>
+                `;
+            }
+        }
+        
+        // アプリケーション初期化
+        document.addEventListener('DOMContentLoaded', () => {
+            new BarcodeLibraryBenchmark();
+        });
+    </script>
+</body>
+</html>
