@@ -43,11 +43,61 @@ jobs:
           echo "  Message: $commit_msg"
           echo "  Date: $commit_date"
 
+      - name: Get latest release tag (hex-aware)
+        id: get_latest_tag
+        run: |
+          # 16進数対応のバージョンソート関数
+          get_latest_hex_tag() {
+            local latest_tag=""
+            local latest_major=0
+            local latest_minor=0
+            local latest_patch=0
+            
+            # デバッグ情報をstderrに出力
+            echo "🔍 Analyzing version tags..." >&2
+            
+            # 全てのタグを取得してループ
+            for tag in $(git tag -l 'v[0-9a-f]*.[0-9a-f]*.[0-9a-f]*'); do
+              # vを除去
+              version=${tag#v}
+              IFS='.' read -r major minor patch <<< "$version"
+              
+              # 16進数を10進数に変換
+              major_dec=$((16#$major))
+              minor_dec=$((16#$minor))
+              patch_dec=$((16#$patch))
+              
+              echo "  Checking: $tag (hex: $major.$minor.$patch -> dec: $major_dec.$minor_dec.$patch_dec)" >&2
+              
+              # バージョン比較
+              if [ $major_dec -gt $latest_major ] || \
+                 ([ $major_dec -eq $latest_major ] && [ $minor_dec -gt $latest_minor ]) || \
+                 ([ $major_dec -eq $latest_major ] && [ $minor_dec -eq $latest_minor ] && [ $patch_dec -gt $latest_patch ]); then
+                latest_tag=$tag
+                latest_major=$major_dec
+                latest_minor=$minor_dec
+                latest_patch=$patch_dec
+                echo "    ✅ New latest: $tag" >&2
+              fi
+            done
+            
+            # 結果のみをstdoutに出力
+            echo "$latest_tag"
+          }
+          
+          latest_tag=$(get_latest_hex_tag)
+          echo "latest_tag=$latest_tag" >> $GITHUB_OUTPUT
+          
+          if [ -n "$latest_tag" ]; then
+            echo "🏷️ Latest release tag: $latest_tag"
+          else
+            echo "🏷️ No previous release found"
+          fi
+
       - name: Get commits since last release
         id: commits_since_release
         run: |
-          # 最新のリリースタグを取得
-          latest_tag=$(git tag -l 'v[0-9a-f]*.[0-9a-f]*.[0-9a-f]*' | sort -V | tail -n1)
+          latest_tag="${{ steps.get_latest_tag.outputs.latest_tag }}"
           
           if [ -z "$latest_tag" ]; then
             echo "No previous release found"
@@ -56,9 +106,15 @@ jobs:
           else
             # 最新タグから現在までのコミット数と内容を取得
             commits_count=$(git rev-list ${latest_tag}..HEAD --count)
-            commits_log=$(git log ${latest_tag}..HEAD --pretty=format:'- %s (%h) by %an' --reverse)
-            echo "📋 Commits since $latest_tag ($commits_count commits):"
-            echo "$commits_log"
+            
+            if [ $commits_count -eq 0 ]; then
+              echo "📋 No new commits since $latest_tag"
+              commits_log="No new changes"
+            else
+              commits_log=$(git log ${latest_tag}..HEAD --pretty=format:'- %s (%h) by %an' --reverse)
+              echo "📋 Commits since $latest_tag ($commits_count commits):"
+              echo "$commits_log"
+            fi
           fi
           
           echo "commits_count=$commits_count" >> $GITHUB_OUTPUT
@@ -85,7 +141,7 @@ jobs:
             echo "✅ Found version in commit message: $version"
           else
             # バージョンが見つからなかった場合、既存タグから16進数で1つ繰り上げ
-            prev="${{ steps.commits_since_release.outputs.latest_tag }}"
+            prev="${{ steps.get_latest_tag.outputs.latest_tag }}"
             if [ -z "$prev" ]; then
               new_tag="v0.0.1"
             else
@@ -97,6 +153,8 @@ jobs:
               ma_dec=$((16#$MA))
               mi_dec=$((16#$MI))
               pa_dec=$((16#$PA))
+              
+              echo "🔄 Previous version: $prev (hex: $MA.$MI.$PA -> dec: $ma_dec.$mi_dec.$pa_dec)"
               
               # パッチバージョンに1を足す
               pa_dec=$((pa_dec + 1))
@@ -120,25 +178,56 @@ jobs:
             echo "🔄 Incremented version by 1 (hex): $new_tag (from $prev)"
           fi
 
-      - name: Check if tag already exists and handle conflict
-        id: check_tag
+      - name: Check if no new commits
+        id: check_commits
         run: |
-          new_tag="${{ steps.get_version.outputs.new_tag }}"
+          commits_count="${{ steps.commits_since_release.outputs.commits_count }}"
+          latest_tag="${{ steps.get_latest_tag.outputs.latest_tag }}"
           
-          if git rev-parse -q --verify "refs/tags/${new_tag}" >/dev/null; then
-            echo "⚠️ Tag ${new_tag} already exists."
+          if [ -n "$latest_tag" ] && [ "$commits_count" -eq "0" ]; then
+            echo "⚠️ No new commits since $latest_tag. Skipping release."
+            echo "skip_release=true" >> $GITHUB_OUTPUT
+          else
+            echo "✅ Found $commits_count new commits. Proceeding with release."
+            echo "skip_release=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Find available tag version
+        if: steps.check_commits.outputs.skip_release == 'false'
+        id: find_available_tag
+        run: |
+          initial_tag="${{ steps.get_version.outputs.new_tag }}"
+          echo "🔍 Starting tag search from: $initial_tag"
+          
+          # 初期タグから始めて、利用可能なタグを見つける
+          base_tag=${initial_tag#v}
+          IFS='.' read -r MA MI PA <<< "$base_tag"
+          
+          ma_dec=$((16#$MA))
+          mi_dec=$((16#$MI))
+          pa_dec=$((16#$PA))
+          
+          max_attempts=50  # 最大50回まで試行
+          attempts=0
+          
+          while [ $attempts -lt $max_attempts ]; do
+            current_tag=$(printf "v%x.%x.%x" $ma_dec $mi_dec $pa_dec)
             
-            # 既存のタグが存在する場合、自動的に次のバージョンを生成
-            base_tag=${new_tag#v}
-            IFS='.' read -r MA MI PA <<< "$base_tag"
+            echo "🔍 Checking tag: $current_tag"
             
-            ma_dec=$((16#$MA))
-            mi_dec=$((16#$MI))  
-            pa_dec=$((16#$PA))
+            if ! git rev-parse -q --verify "refs/tags/${current_tag}" >/dev/null 2>&1; then
+              echo "✅ Found available tag: $current_tag"
+              echo "available_tag=$current_tag" >> $GITHUB_OUTPUT
+              echo "found=true" >> $GITHUB_OUTPUT
+              exit 0
+            else
+              echo "⚠️ Tag $current_tag already exists"
+            fi
             
-            # パッチバージョンを1つ上げる
+            # 次のバージョンを計算
             pa_dec=$((pa_dec + 1))
             
+            # 16進数の桁上がり処理
             if [ $pa_dec -ge 16 ]; then
               mi_dec=$((mi_dec + pa_dec / 16))
               pa_dec=$((pa_dec % 16))
@@ -149,33 +238,38 @@ jobs:
               mi_dec=$((mi_dec % 16))
             fi
             
-            auto_tag=$(printf "v%x.%x.%x" $ma_dec $mi_dec $pa_dec)
-            echo "🔄 Auto-generating next version: $auto_tag"
-            echo "exists=true" >> $GITHUB_OUTPUT
-            echo "auto_tag=$auto_tag" >> $GITHUB_OUTPUT
-          else
-            echo "✅ Tag ${new_tag} is available"
-            echo "exists=false" >> $GITHUB_OUTPUT
-            echo "auto_tag=$new_tag" >> $GITHUB_OUTPUT
-          fi
+            attempts=$((attempts + 1))
+          done
+          
+          echo "❌ Could not find available tag after $max_attempts attempts"
+          echo "found=false" >> $GITHUB_OUTPUT
+          exit 1
 
-      - name: Set final tag version
-        id: final_version
+      - name: Verify final tag availability
+        if: steps.check_commits.outputs.skip_release == 'false' && steps.find_available_tag.outputs.found == 'true'
+        id: verify_tag
         run: |
-          if [ "${{ steps.check_tag.outputs.exists }}" == "true" ]; then
-            final_tag="${{ steps.check_tag.outputs.auto_tag }}"
-            echo "Using auto-generated tag: $final_tag"
+          final_tag="${{ steps.find_available_tag.outputs.available_tag }}"
+          
+          echo "🔍 Final verification for tag: $final_tag"
+          
+          if git rev-parse -q --verify "refs/tags/${final_tag}" >/dev/null 2>&1; then
+            echo "❌ ERROR: Tag $final_tag exists during final check!"
+            echo "This should not happen. Please check for race conditions."
+            exit 1
           else
-            final_tag="${{ steps.get_version.outputs.new_tag }}"
-            echo "Using original tag: $final_tag"
+            echo "✅ Final tag verification passed: $final_tag"
+            echo "verified_tag=$final_tag" >> $GITHUB_OUTPUT
           fi
-          echo "tag=$final_tag" >> $GITHUB_OUTPUT
 
       - name: Create and push tag
+        if: steps.check_commits.outputs.skip_release == 'false' && steps.find_available_tag.outputs.found == 'true'
         run: |
-          new_tag="${{ steps.final_version.outputs.tag }}"
+          new_tag="${{ steps.verify_tag.outputs.verified_tag }}"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          
+          echo "🏷️ Creating tag: $new_tag"
           
           if [ "${{ steps.get_version.outputs.from_commit }}" == "true" ]; then
             git tag -a "$new_tag" -m "Release $new_tag (from commit message)"
@@ -183,71 +277,84 @@ jobs:
             git tag -a "$new_tag" -m "Release $new_tag (auto-incremented hex)"
           fi
           
+          echo "📤 Pushing tag: $new_tag"
           git push origin "$new_tag"
-          echo "🏷️ Created and pushed tag: $new_tag"
+          echo "✅ Successfully created and pushed tag: $new_tag"
 
       - name: Create ZIP of current commit
+        if: steps.check_commits.outputs.skip_release == 'false' && steps.find_available_tag.outputs.found == 'true'
         id: zip
         run: |
-          zipname="site-${{ steps.final_version.outputs.tag }}.zip"
+          zipname="site-${{ steps.verify_tag.outputs.verified_tag }}.zip"
           zip -r "$zipname" . -x "./.git/*" "./.github/*"
           echo "zipname=$zipname" >> $GITHUB_OUTPUT
           echo "📦 Created ZIP: $zipname"
 
       - name: Generate release notes
+        if: steps.check_commits.outputs.skip_release == 'false' && steps.find_available_tag.outputs.found == 'true'
         id: release_notes
         run: |
-          tag="${{ steps.final_version.outputs.tag }}"
+          tag="${{ steps.verify_tag.outputs.verified_tag }}"
+          initial_tag="${{ steps.get_version.outputs.new_tag }}"
           commit_msg="${{ steps.commit_info.outputs.commit_msg }}"
           commit_author="${{ steps.commit_info.outputs.commit_author }}"
           commit_hash="${{ steps.commit_info.outputs.commit_hash }}"
           commit_date="${{ steps.commit_info.outputs.commit_date }}"
           commits_count="${{ steps.commits_since_release.outputs.commits_count }}"
-          latest_tag="${{ steps.commits_since_release.outputs.latest_tag }}"
+          latest_tag="${{ steps.get_latest_tag.outputs.latest_tag }}"
           
-          cat > release_notes.md << EOF
-          ## 📋 Release Information
-          
-          **Version**: $tag  
-          **Release Date**: $(date '+%Y-%m-%d %H:%M:%S JST')  
-          **Commits Included**: $commits_count commits
-          
-          ## 📝 Latest Commit
-          
-          - **Message**: $commit_msg
-          - **Author**: $commit_author
-          - **Hash**: $commit_hash
-          - **Date**: $commit_date
-          
-          ## 📊 Changes Since Last Release
-          
-          EOF
-          
-          if [ -n "$latest_tag" ]; then
-            echo "**Since**: $latest_tag" >> release_notes.md
-            echo "" >> release_notes.md
-            cat commits_log.txt >> release_notes.md
-          else
-            echo "This is the initial release." >> release_notes.md
-          fi
-          
-          echo "" >> release_notes.md
-          echo "## 📦 Assets" >> release_notes.md
-          echo "- Source code archive (ZIP)" >> release_notes.md
-          
-          # コミットボディがある場合は追加
-          if [ -s commit_body.txt ]; then
-            echo "" >> release_notes.md
-            echo "## 📖 Commit Details" >> release_notes.md
-            echo "" >> release_notes.md
-            cat commit_body.txt >> release_notes.md
-          fi
+          # リリースノートをファイルに直接書き込み
+          {
+            echo "## 📋 Release Information"
+            echo ""
+            echo "**Version**: $tag"
+            echo "**Release Date**: $(date '+%Y-%m-%d %H:%M:%S JST')"
+            echo "**Commits Included**: $commits_count commits"
+            echo ""
+            
+            # バージョン自動調整の説明
+            if [ "$initial_tag" != "$tag" ]; then
+              echo "> **Note**: Originally planned as $initial_tag, but automatically adjusted to $tag due to existing tags."
+              echo ""
+            fi
+            
+            echo "## 📝 Latest Commit"
+            echo ""
+            echo "- **Message**: $commit_msg"
+            echo "- **Author**: $commit_author"
+            echo "- **Hash**: $commit_hash"
+            echo "- **Date**: $commit_date"
+            echo ""
+            echo "## 📊 Changes Since Last Release"
+            echo ""
+            
+            if [ -n "$latest_tag" ]; then
+              echo "**Since**: $latest_tag"
+              echo ""
+              cat commits_log.txt
+            else
+              echo "This is the initial release."
+            fi
+            
+            echo ""
+            echo "## 📦 Assets"
+            echo "- Source code archive (ZIP)"
+            
+            # コミットボディがある場合は追加
+            if [ -s commit_body.txt ]; then
+              echo ""
+              echo "## 📖 Commit Details"
+              echo ""
+              cat commit_body.txt
+            fi
+          } > release_notes.md
 
       - name: Create GitHub Release
+        if: steps.check_commits.outputs.skip_release == 'false' && steps.find_available_tag.outputs.found == 'true'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.final_version.outputs.tag }}
-          name: "🚀 Release ${{ steps.final_version.outputs.tag }}"
+          tag_name: ${{ steps.verify_tag.outputs.verified_tag }}
+          name: "🚀 Release ${{ steps.verify_tag.outputs.verified_tag }}"
           draft: false
           prerelease: false
           body_path: release_notes.md
