@@ -684,7 +684,7 @@ function getCenter(points) {
 }
 
 function processVideo(videoElement, canvasElement, animationFrameHolder) {
-    const ctx = canvasElement.getContext('2d');
+    const ctx = canvasElement.getContext('2d', { willReadFrequently: true });
     
     function tick() {
         if (videoElement.readyState === videoElement.HAVE_ENOUGH_DATA) {
@@ -715,22 +715,25 @@ async function startScanning() {
   stopBtn.disabled = false;
 
   try {
-    const animationFrameHolder = { id: null };
-    processVideo(video, canvas, animationFrameHolder);
-    
-    // Note: decodeFromVideoDevice continuously scans. To get multiple results at once,
-    // you might need a different setup or a library version that supports decodeMultiple.
-    codeReader.decodeFromVideoDevice(selectedDeviceId, 'video', (result, err) => {
-      if (result) {
-        // For now, we process the first result found.
-        onDetected(result);
-      }
-      if (err && !(err instanceof ZXing.NotFoundException)) {
-        console.error(err);
-        statusMessage.textContent = `❌ エラー: ${err.message}`;
-        statusMessage.className = 'p-3 rounded-lg mb-4 text-center font-medium bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-300 dark:border-red-700';
-      }
-    });
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { deviceId: selectedDeviceId } });
+    video.srcObject = stream;
+    video.onloadedmetadata = () => {
+        video.play();
+        const animationFrameHolder = { id: null };
+        processVideo(video, canvas, animationFrameHolder);
+        animationFrameId = animationFrameHolder;
+
+        codeReader.decodeFromStream(stream, video, (result, err) => {
+            if (result) {
+                onDetected(result);
+            }
+            if (err && !(err instanceof ZXing.NotFoundException)) {
+                console.error(err);
+                statusMessage.textContent = `❌ エラー: ${err.message}`;
+                statusMessage.className = 'p-3 rounded-lg mb-4 text-center font-medium bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-300 dark:border-red-700';
+            }
+        });
+    };
     statusMessage.textContent = '🔍 バーコードを緑枠内に合わせてください';
     statusMessage.className = 'p-3 rounded-lg mb-4 text-center font-medium bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-700';
   } catch (err) {
@@ -747,6 +750,9 @@ function stopScanning() {
   if (!isScanning) return;
   isScanning = false;
   codeReader.reset();
+  if (video.srcObject) {
+    video.srcObject.getTracks().forEach(track => track.stop());
+  }
   if (animationFrameId) {
     cancelAnimationFrame(animationFrameId.id);
   }
@@ -765,20 +771,25 @@ async function startCheckScanning() {
   checkStopBtn.disabled = false;
 
   try {
-    const animationFrameHolder = { id: null };
-    processVideo(checkVideo, checkCanvas, animationFrameHolder);
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { deviceId: checkSelectedDeviceId } });
+    checkVideo.srcObject = stream;
+    checkVideo.onloadedmetadata = () => {
+        checkVideo.play();
+        const animationFrameHolder = { id: null };
+        processVideo(checkVideo, checkCanvas, animationFrameHolder);
+        checkAnimationFrameId = animationFrameHolder;
 
-    codeReader.decodeFromVideoDevice(checkSelectedDeviceId, 'check-video', (result, err) => {
-      if (result) {
-        // For now, we process the first result found.
-        onCheckDetected(result);
-      }
-      if (err && !(err instanceof ZXing.NotFoundException)) {
-        console.error(err);
-        checkStatusMessage.textContent = `❌ エラー: ${err.message}`;
-        checkStatusMessage.className = 'p-3 rounded-lg mb-4 text-center font-medium bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-300 dark:border-red-700';
-      }
-    });
+        codeReader.decodeFromStream(stream, checkVideo, (result, err) => {
+            if (result) {
+                onCheckDetected(result);
+            }
+            if (err && !(err instanceof ZXing.NotFoundException)) {
+                console.error(err);
+                checkStatusMessage.textContent = `❌ エラー: ${err.message}`;
+                checkStatusMessage.className = 'p-3 rounded-lg mb-4 text-center font-medium bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-300 dark:border-red-700';
+            }
+        });
+    };
     checkStatusMessage.textContent = '🔍 バーコードを緑枠内に合わせてください';
     checkStatusMessage.className = 'p-3 rounded-lg mb-4 text-center font-medium bg-blue-50 dark:bg-blue-900/3d text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-700';
   } catch (err) {
@@ -795,6 +806,9 @@ function stopCheckScanning() {
   if (!isCheckScanning) return;
   isCheckScanning = false;
   codeReader.reset();
+  if (checkVideo.srcObject) {
+    checkVideo.srcObject.getTracks().forEach(track => track.stop());
+  }
   if (checkAnimationFrameId) {
     cancelAnimationFrame(checkAnimationFrameId.id);
   }
