@@ -105,7 +105,7 @@ jobs:
             echo "🏷️ No previous release found"
           fi
 
-            - name: Get commits in this push
+      - name: Get commits in this push
         id: push_commits
         run: |
           # GitHub Actionsのプッシュイベントから、今回のプッシュに含まれるコミットを取得
@@ -130,106 +130,6 @@ jobs:
             echo "- **${{ steps.commit_info.outputs.commit_msg }}** (\`${{ steps.commit_info.outputs.commit_short_hash }}\`) by ${{ steps.commit_info.outputs.commit_author }}" > push_commits.txt
           fi
 
-      - name: Generate release notes
-        if: steps.check_commits.outputs.skip_release == 'false' && steps.find_available_tag.outputs.found == 'true'
-        id: release_notes
-        run: |
-          tag="${{ steps.verify_tag.outputs.verified_tag }}"
-          initial_tag="${{ steps.get_version.outputs.new_tag }}"
-          commit_msg="${{ steps.commit_info.outputs.commit_msg }}"
-          commit_author="${{ steps.commit_info.outputs.commit_author }}"
-          commit_hash="${{ steps.commit_info.outputs.commit_short_hash }}"
-          commit_date="${{ steps.commit_info.outputs.commit_date }}"
-          push_commits_count="${{ steps.push_commits.outputs.push_commits_count }}"
-          has_push_commits="${{ steps.push_commits.outputs.has_push_commits }}"
-          latest_tag="${{ steps.get_latest_tag.outputs.latest_tag }}"
-          has_body="${{ steps.commit_info.outputs.has_body }}"
-          
-          # リリースノートをファイルに直接書き込み
-          {
-            echo "## 📋 Release Information"
-            echo ""
-            echo "**Version**: $tag"
-            echo "**Release Date**: $(date '+%Y-%m-%d %H:%M:%S JST')"
-            
-            if [ "$has_push_commits" == "true" ]; then
-              echo "**Commits in this push**: $push_commits_count commits"
-            else
-              echo "**Commits included**: 1 commit"
-            fi
-            
-            # バージョン自動調整の説明
-            if [ "$initial_tag" != "$tag" ]; then
-              echo ""
-              echo "> **Note**: Originally planned as $initial_tag, but automatically adjusted to $tag due to existing tags."
-            fi
-            
-            echo ""
-            echo "## 📝 Latest Commit"
-            echo ""
-            echo "- **Message**: $commit_msg"
-            echo "- **Author**: $commit_author"
-            echo "- **Hash**: \`$commit_hash\`"
-            echo "- **Date**: $commit_date"
-            
-            echo ""
-            if [ "$has_push_commits" == "true" ] && [ "$push_commits_count" -gt 1 ]; then
-              echo "## 📦 Commits in This Push"
-              echo ""
-              cat push_commits.txt
-            else
-              echo "## 📦 Changes in This Release"
-              echo ""
-              echo "- **$commit_msg** (\`$commit_hash\`) by $commit_author"
-            fi
-            
-            echo ""
-            echo "## 📊 Previous Release Comparison"
-            echo ""
-            
-            if [ -n "$latest_tag" ]; then
-              echo "**Previous version**: $latest_tag"
-              total_commits_since=$(git rev-list ${latest_tag}..HEAD --count)
-              echo "**Total commits since $latest_tag**: $total_commits_since commits"
-              
-              if [ "$total_commits_since" -gt "$push_commits_count" ]; then
-                echo ""
-                echo "<details>"
-                echo "<summary>View all commits since $latest_tag</summary>"
-                echo ""
-                git log ${latest_tag}..HEAD --pretty=format:"- %s (\`%h\`) by %an" --date=short
-                echo ""
-                echo "</details>"
-              fi
-            else
-              echo "This is the initial release."
-            fi
-            
-            echo ""
-            echo "## 📦 Assets"
-            echo ""
-            echo "- Source code archive (ZIP)"
-            echo "- All source files as of commit \`$commit_hash\`"
-            
-            # コミットボディがある場合のみ追加
-            if [ "$has_body" == "true" ] && [ -s commit_body.txt ]; then
-              echo ""
-              echo "## 📖 Additional Commit Details"
-              echo ""
-              echo "\`\`\`"
-              cat commit_body.txt
-              echo "\`\`\`"
-            fi
-            
-            echo ""
-            echo "---"
-            echo "*Generated automatically by GitHub Actions*"
-            
-          } > release_notes.md
-          
-          echo "📝 Generated release notes for push with $push_commits_count commits"
-
-
       - name: Get commits since last release
         id: commits_since_release
         run: |
@@ -237,37 +137,30 @@ jobs:
           
           if [ -z "$latest_tag" ]; then
             echo "📋 No previous release found - this will be the initial release"
-            commits_count=1
-            echo "- Initial release commit" > commits_log.txt
+            total_commits_count=1
+            echo "- Initial release commit" > all_commits_log.txt
           else
             # 最新タグから現在までのコミット数と内容を取得
-            commits_count=$(git rev-list ${latest_tag}..HEAD --count)
+            total_commits_count=$(git rev-list ${latest_tag}..HEAD --count)
             
             echo "📋 Checking commits since $latest_tag..."
-            echo "📊 Found $commits_count commits since last release"
+            echo "📊 Found $total_commits_count total commits since last release"
             
-            if [ $commits_count -eq 0 ]; then
+            if [ $total_commits_count -eq 0 ]; then
               echo "⚠️ No new commits since $latest_tag"
-              echo "No new changes since last release" > commits_log.txt
+              echo "No new changes since last release" > all_commits_log.txt
             else
-              echo "📋 Generating commit log since $latest_tag..."
+              echo "📋 Generating complete commit log since $latest_tag..."
               
-              # 最新から古い順序でコミット情報を取得（--reverseを削除）
-              {
-                echo "### 📝 Commits (newest to oldest):"
-                echo ""
-                git log ${latest_tag}..HEAD --pretty=format:"**%s** (\`%h\`)  " --date=short
-                echo ""
-                echo ""
-                git log ${latest_tag}..HEAD --pretty=format:"- %cd: %s by %an (\`%h\`)" --date=short
-              } > commits_log.txt
+              # 全てのコミット情報を取得（詳細比較用）
+              git log ${latest_tag}..HEAD --pretty=format:"- %s (\`%h\`) by %an" --date=short > all_commits_log.txt
               
-              echo "📋 Generated commit log:"
-              cat commits_log.txt
+              echo "📋 All commits since $latest_tag:"
+              cat all_commits_log.txt
             fi
           fi
           
-          echo "commits_count=$commits_count" >> $GITHUB_OUTPUT
+          echo "total_commits_count=$total_commits_count" >> $GITHUB_OUTPUT
           echo "latest_tag=$latest_tag" >> $GITHUB_OUTPUT
 
       - name: Extract version from commit message or increment by 1 (hex)
@@ -328,14 +221,14 @@ jobs:
       - name: Check if no new commits
         id: check_commits
         run: |
-          commits_count="${{ steps.commits_since_release.outputs.commits_count }}"
+          total_commits_count="${{ steps.commits_since_release.outputs.total_commits_count }}"
           latest_tag="${{ steps.get_latest_tag.outputs.latest_tag }}"
           
-          if [ -n "$latest_tag" ] && [ "$commits_count" -eq "0" ]; then
+          if [ -n "$latest_tag" ] && [ "$total_commits_count" -eq "0" ]; then
             echo "⚠️ No new commits since $latest_tag. Skipping release."
             echo "skip_release=true" >> $GITHUB_OUTPUT
           else
-            echo "✅ Found $commits_count new commits. Proceeding with release."
+            echo "✅ Found $total_commits_count total commits since last release. Proceeding with release."
             echo "skip_release=false" >> $GITHUB_OUTPUT
           fi
 
@@ -445,10 +338,11 @@ jobs:
           initial_tag="${{ steps.get_version.outputs.new_tag }}"
           commit_msg="${{ steps.commit_info.outputs.commit_msg }}"
           commit_author="${{ steps.commit_info.outputs.commit_author }}"
-          commit_email="${{ steps.commit_info.outputs.commit_email }}"
           commit_hash="${{ steps.commit_info.outputs.commit_short_hash }}"
           commit_date="${{ steps.commit_info.outputs.commit_date }}"
-          commits_count="${{ steps.commits_since_release.outputs.commits_count }}"
+          push_commits_count="${{ steps.push_commits.outputs.push_commits_count }}"
+          has_push_commits="${{ steps.push_commits.outputs.has_push_commits }}"
+          total_commits_count="${{ steps.commits_since_release.outputs.total_commits_count }}"
           latest_tag="${{ steps.get_latest_tag.outputs.latest_tag }}"
           has_body="${{ steps.commit_info.outputs.has_body }}"
           
@@ -458,7 +352,12 @@ jobs:
             echo ""
             echo "**Version**: $tag"
             echo "**Release Date**: $(date '+%Y-%m-%d %H:%M:%S JST')"
-            echo "**Commits Included**: $commits_count commits"
+            
+            if [ "$has_push_commits" == "true" ]; then
+              echo "**Commits in this push**: $push_commits_count commits"
+            else
+              echo "**Commits included**: 1 commit"
+            fi
             
             # バージョン自動調整の説明
             if [ "$initial_tag" != "$tag" ]; then
@@ -475,13 +374,33 @@ jobs:
             echo "- **Date**: $commit_date"
             
             echo ""
-            echo "## 📊 Changes Since Last Release"
+            if [ "$has_push_commits" == "true" ] && [ "$push_commits_count" -gt 1 ]; then
+              echo "## 📦 Commits in This Push"
+              echo ""
+              cat push_commits.txt
+            else
+              echo "## 📦 Changes in This Release"
+              echo ""
+              echo "- **$commit_msg** (\`$commit_hash\`) by $commit_author"
+            fi
+            
+            echo ""
+            echo "## 📊 Previous Release Comparison"
             echo ""
             
             if [ -n "$latest_tag" ]; then
-              echo "**Range**: $latest_tag..HEAD"
-              echo ""
-              cat commits_log.txt
+              echo "**Previous version**: $latest_tag"
+              echo "**Total commits since $latest_tag**: $total_commits_count commits"
+              
+              if [ "$total_commits_count" -gt "$push_commits_count" ]; then
+                echo ""
+                echo "<details>"
+                echo "<summary>View all $total_commits_count commits since $latest_tag</summary>"
+                echo ""
+                cat all_commits_log.txt
+                echo ""
+                echo "</details>"
+              fi
             else
               echo "This is the initial release."
             fi
@@ -508,18 +427,7 @@ jobs:
             
           } > release_notes.md
           
-          echo "📝 Generated release notes:"
-          cat release_notes.md
+          echo "📝 Generated release notes for push with $push_commits_count commits"
 
       - name: Create GitHub Release
-        if: steps.check_commits.outputs.skip_release == 'false' && steps.find_available_tag.outputs.found == 'true'
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ steps.verify_tag.outputs.verified_tag }}
-          name: "🚀 Release ${{ steps.verify_tag.outputs.verified_tag }}"
-          draft: false
-          prerelease: false
-          body_path: release_notes.md
-          files: ${{ steps.zip.outputs.zipname }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        if: steps.check_commits.outputs.skip_release == 'false' && steps.fin
