@@ -1,184 +1,220 @@
-/* キャッシュ名はバージョンで変えると更新が楽 */
-const CACHE_NAME = 'wasuremono-pro-v2.2';
+importScripts('js/indexdb.js');
 
-/* オフラインでも必要なファイルを列挙 */
+const CACHE_NAME = 'wasuremono-pro-v2.3'; // Cache version updated
 const urlsToCache = [
-  '/CheckMate-V2/',             // GitHub Pages のルート（上と同じ）
-  '/CheckMate-V2/index.html',
-  '/CheckMate-V2/js/dark_mode.js',
+    '/CheckMate-V2/',
+    '/CheckMate-V2/index.html',
+    '/CheckMate-V2/js/dark_mode.js',
     '/CheckMate-V2/js/indexdb.js',
     '/CheckMate-V2/js/style_config.js',
     '/CheckMate-V2/js/dark_mode_startup.js',
-  // '/CheckMate-V2/icons/icon-192.png',
-  '/CheckMate-V2/icons/icon-512.png',
-  'https://unpkg.com/quagga@0.12.1/dist/quagga.min.js'
+    '/CheckMate-V2/icons/icon-192.png',
+    '/CheckMate-V2/icons/icon-512.png',
+    'https://unpkg.com/quagga@0.12.1/dist/quagga.min.js'
 ];
 
-/* インストール時にファイルをキャッシュ */
 self.addEventListener('install', event => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then(async cache => {
-      for (const url of urlsToCache) {
-        try {
-          await cache.add(url);
-        } catch (err) {
-          console.error('❌ cache failed:', url, err);
-        }
-      }
-    })
-  );
+    event.waitUntil(
+        caches.open(CACHE_NAME).then(cache => {
+            return cache.addAll(urlsToCache).catch(err => {
+                console.error('Failed to cache URLs:', err);
+            });
+        })
+    );
 });
 
-
-/* 新旧キャッシュを整理（任意 ─ 推奨） */
 self.addEventListener('activate', event => {
-  event.waitUntil(
-    caches.keys().then(keys =>
-      Promise.all(keys.map(key => {
-        if (key !== CACHE_NAME) return caches.delete(key);
-      }))
-    )
-  );
+    event.waitUntil(
+        caches.keys().then(keys =>
+            Promise.all(keys.map(key => {
+                if (key !== CACHE_NAME) return caches.delete(key);
+            }))
+        )
+    );
+    return self.clients.claim();
 });
 
-/* ネット優先。失敗したらキャッシュを返す */
 self.addEventListener('fetch', event => {
-  event.respondWith(
-    fetch(event.request).catch(() => caches.match(event.request))
-  );
+    event.respondWith(
+        caches.match(event.request).then(response => {
+            return response || fetch(event.request).catch(() => caches.match('/CheckMate-V2/index.html'));
+        })
+    );
 });
 
-// notify patch start
 // =================================================================
-// ローカル通知機能パッチ
+// Notification Logic
 // =================================================================
 
-/**
- * Service Workerにメッセージが送られたときの処理
- * 主に通知のスケジュールとキャンセルを行う
- */
-self.addEventListener('message', (event) => {
-    if (event.data && event.data.type === 'schedule') {
-        scheduleNotification(event.data.item);
-    }
-    if (event.data && event.data.type === 'cancel') {
-        cancelNotification(event.data.itemId);
-    }
-});
+// --- IndexedDB Access from Service Worker ---
+let dbPromise;
 
-/**
- * showTriggerを使用して通知をスケジュールする
- * @param {object} item - 通知するアイテム
- */
-async function scheduleNotification(item) {
-    if (!item.notifyAt) return;
-
-    const [hours, minutes] = item.notifyAt.split(':');
-    const now = new Date();
-    const notifyTime = new Date();
-    notifyTime.setHours(hours, minutes, 0, 0);
-
-    // 既に時刻を過ぎている場合はスケジュールしない（ただし、今日の未来の時刻ならOK）
-    if (notifyTime < now) {
-        notifyTime.setDate(notifyTime.getDate() + 1); // 明日の同じ時刻に設定
-    }
-
-    // 1. 5分前通知
-    const preNotifyTime = new Date(notifyTime.getTime() - 5 * 60 * 1000);
-    if (preNotifyTime > new Date()) {
-        self.registration.showNotification(`まもなく: ${item.name}` , {
-            tag: `${item.id}-pre`,
-            body: `5分後に「${item.name}」のタスクが予定されています。`,
-            icon: '/icons/icon-192.png',
-            showTrigger: new TimestampTrigger(preNotifyTime.getTime()),
-            data: { itemId: item.id }
+function getDb() {
+    if (!dbPromise) {
+        dbPromise = new Promise((resolve, reject) => {
+            const request = indexedDB.open(DB_NAME, DB_VERSION);
+            request.onerror = () => reject(request.error);
+            request.onsuccess = (event) => resolve(event.target.result);
+            // No onupgradeneeded here, assuming main thread handles it.
         });
     }
+    return dbPromise;
+}
 
-    // 2. メイン通知
-    self.registration.showNotification(item.name, {
-        tag: item.id,
-        body: `タスク「${item.name}」の期限です。優先度: ${item.priority}`,
-        icon: '/icons/icon-192.png',
-        showTrigger: new TimestampTrigger(notifyTime.getTime()),
-        renotify: true, // 再通知を許可
-        data: {
-            itemId: item.id,
-            priority: item.priority,
-            originalTime: notifyTime.getTime(),
-            renotifyCount: item.priority === 'must' ? 3 : 0 // mustなら3回再通知
-        }
+async function getItemFromDb(id) {
+    const db = await getDb();
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(ITEMS_STORE_NAME, 'readonly');
+        const store = tx.objectStore(ITEMS_STORE_NAME);
+        const request = store.get(id);
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
     });
 }
 
-/**
- * 特定のアイテムに関連するすべての通知をキャンセルする
- * @param {string} itemId - キャンセルするアイテムのID
- */
-async function cancelNotification(itemId) {
+async function getItemsForDay(dayOfWeek) {
+    const db = await getDb();
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(ITEMS_STORE_NAME, 'readonly');
+        const store = tx.objectStore(ITEMS_STORE_NAME);
+        const request = store.getAll();
+        request.onsuccess = () => {
+            const allItems = request.result;
+            const dayItems = allItems.filter(item => item.days.includes(dayOfWeek));
+            resolve(dayItems);
+        };
+        request.onerror = () => reject(request.error);
+    });
+}
+
+async function getAllForgottenRecords() {
+  const db = await getDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(FORGOTTEN_RECORDS_STORE_NAME, 'readonly');
+    const store = tx.objectStore(FORGOTTEN_RECORDS_STORE_NAME);
+    const request = store.getAll();
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+
+// --- Event Listeners ---
+
+self.addEventListener('message', (event) => {
+    if (event.data && event.data.type) {
+        switch (event.data.type) {
+            case 'schedule-daily':
+                scheduleDailyNotification(event.data.payload);
+                break;
+            case 'cancel-all':
+                cancelAllNotifications();
+                break;
+        }
+    }
+});
+
+async function scheduleDailyNotification(payload) {
+    const { title, body, time, renotify, tag } = payload;
+    const [hours, minutes] = time.split(':');
+
+    const notificationTime = new Date();
+    notificationTime.setHours(parseInt(hours, 10));
+    notificationTime.setMinutes(parseInt(minutes, 10));
+    notificationTime.setSeconds(0, 0);
+
+    // If the time is in the past for today, schedule it for tomorrow
+    if (notificationTime < new Date()) {
+        notificationTime.setDate(notificationTime.getDate() + 1);
+    }
+
+    try {
+        await self.registration.showNotification(title, {
+            tag: tag,
+            body: body,
+            icon: '/CheckMate-V2/icons/icon-192.png',
+            showTrigger: new TimestampTrigger(notificationTime.getTime()),
+            data: {
+                scheduledTime: notificationTime.toISOString(),
+                renotify: renotify
+            }
+        });
+        console.log(`Daily notification scheduled for ${notificationTime.toLocaleString()}`);
+    } catch (error) {
+        console.error('Error scheduling daily notification:', error);
+    }
+}
+
+async function cancelAllNotifications() {
     const notifications = await self.registration.getNotifications();
-    notifications.forEach(notification => {
-        // タグがIDで始まるものをすべてキャンセル (e.g., 'item-id', 'item-id-pre', 'item-id-renotify-1')
-        if (notification.tag.startsWith(itemId)) {
-            notification.close();
-        }
-    });
+    for (const notification of notifications) {
+        notification.close();
+    }
+    console.log('All scheduled notifications have been cancelled.');
 }
 
-/**
- * 通知がクリックされたときのデフォルトの動作
- * アプリケーションを開き、フォーカスする
- */
 self.addEventListener('notificationclick', (event) => {
     event.notification.close();
     event.waitUntil(
         clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
-            if (clientList.length > 0) {
-                let client = clientList[0];
-                for (let i = 0; i < clientList.length; i++) {
-                    if (clientList[i].focused) {
-                        client = clientList[i];
-                    }
-                }
+            const urlToOpen = new URL('/CheckMate-V2/', self.location.origin).href;
+            const client = clientList.find(c => c.url === urlToOpen && 'focus' in c);
+            if (client) {
                 return client.focus();
             } else {
-                return clients.openWindow('/');
+                return clients.openWindow(urlToOpen);
             }
         })
     );
 });
 
-/**
- * 通知が表示された後の処理 (主に再通知ロジック)
- */
 self.addEventListener('notificationclose', async (event) => {
     const notification = event.notification;
     const data = notification.data;
 
-    // データがない、または再通知カウントがない場合は終了
-    if (!data || !data.renotifyCount || data.renotifyCount <= 0) {
+    // Only re-notify for the main daily summary
+    if (!data || !data.renotify || notification.tag !== 'daily-summary') {
         return;
     }
 
-    // TODO: 本来はここでIndexedDBにアクセスして、アイテムが未チェックか確認するのが最も確実です。
-    // しかし、ServiceWorkerからのIndexedDBアクセスは複雑なため、ここではデモとして
-    // closeイベントをトリガーに再通知をスケジュールします。
-    // ユーザーがチェックした場合、メインスレッドからキャンセルメッセージが送られ、この再通知もキャンセルされます。
+    const scheduledTime = new Date(data.scheduledTime);
+    const dayOfWeek = ['日', '月', '火', '水', '木', '金', '土'][scheduledTime.getDay()];
 
-    const newRenotifyCount = data.renotifyCount - 1;
-    const nextNotifyTime = new Date(notification.timestamp + 10 * 60 * 1000); // 10分後
+    const itemsToReNotify = [];
+    const itemsForDay = await getItemsForDay(dayOfWeek);
+    const forgottenRecords = await getAllForgottenRecords(); // Assumes this function exists from indexdb.js
 
-    self.registration.showNotification(`${data.name} (再通知)`, {
-        tag: `${data.itemId}-renotify-${newRenotifyCount}`,
-        body: `【再通知】タスク「${data.name}」が未完了です。`,
-        icon: '/icons/icon-192.png',
-        showTrigger: new TimestampTrigger(nextNotifyTime.getTime()),
-        renotify: true,
-        data: {
-            ...data,
-            renotifyCount: newRenotifyCount
-        }
+    // Find frequently forgotten item IDs
+    const forgottenCounts = {};
+    forgottenRecords.forEach(record => {
+        record.itemIds.forEach(id => {
+            forgottenCounts[id] = (forgottenCounts[id] || 0) + 1;
+        });
     });
-});
+    const frequentlyForgottenIds = Object.keys(forgottenCounts).filter(id => forgottenCounts[id] >= 3); // Example: 3+ times
 
-// notify patch end
+    for (const item of itemsForDay) {
+        if (item.checked) continue; // Skip already checked items
+
+        if (item.priority === '必須' || item.priority === '重要' || frequentlyForgottenIds.includes(item.id.toString())) {
+            itemsToReNotify.push(item.name);
+        }
+    }
+
+    if (itemsToReNotify.length > 0) {
+        const nextNotifyTime = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes from now
+
+        try {
+            await self.registration.showNotification('【未チェックあり】持ち物を確認してください', {
+                tag: `renotify-${Date.now()}`,
+                body: `未チェックの重要アイテムがあります: ${itemsToReNotify.join('、')}`,
+                icon: '/CheckMate-V2/icons/icon-192.png',
+                showTrigger: new TimestampTrigger(nextNotifyTime.getTime()),
+                renotify: true, // Allow this to be re-notified again if needed
+                data: { ...data } // Carry over original data
+            });
+        } catch (error) {
+            console.error('Error scheduling re-notification:', error);
+        }
+    }
+});
