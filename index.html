@@ -582,7 +582,6 @@ ZXingBrowser.BrowserMultiFormatReader.listVideoInputDevices()
 // 登録用スキャン検出
 function onDetected(result) {
   const code = result.getText();
-  console.log(code);
   if (!code) return;
 
   const existing = items.find(i => i.code === code);
@@ -599,6 +598,14 @@ function onDetected(result) {
   document.getElementById('detail-name').focus();
 
   if (navigator.vibrate) navigator.vibrate([100, 50, 100, 50, 100]);
+  stopScanning();
+    // 詳細登録セクションまでスムーズスクロール
+  setTimeout(() => {
+    document.getElementById('detail-name').scrollIntoView({
+      behavior: 'smooth',
+      block: 'center'
+    });
+  }, 100);
 }
 
 // チェック用スキャン検出
