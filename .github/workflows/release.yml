@@ -127,12 +127,17 @@ jobs:
             else
               echo "📋 Generating commit log since $latest_tag..."
               
-              # より詳細なコミット情報を取得
+              # 最新から古い順序でコミット情報を取得（--reverseを削除）
               {
-                git log ${latest_tag}..HEAD --reverse --pretty=format:"- **%s** (%h)%n  *Author: %an*%n  *Date: %cd*%n" --date=short
+                echo "### 📝 Commits (newest to oldest):"
+                echo ""
+                git log ${latest_tag}..HEAD --pretty=format:"**%s** (\`%h\`)  " --date=short
+                echo ""
+                echo ""
+                git log ${latest_tag}..HEAD --pretty=format:"- %cd: %s by %an (\`%h\`)" --date=short
               } > commits_log.txt
               
-              echo "📋 Commits since $latest_tag:"
+              echo "📋 Generated commit log:"
               cat commits_log.txt
             fi
           fi
@@ -349,7 +354,7 @@ jobs:
             echo ""
             
             if [ -n "$latest_tag" ]; then
-              echo "**Since**: $latest_tag"
+              echo "**Range**: $latest_tag..HEAD"
               echo ""
               cat commits_log.txt
             else
