@@ -13,12 +13,16 @@ async function updateStats() {
   document.getElementById('today-items').textContent = today;
 }
 
-function updateDetailedStats() {
+async function updateDetailedStats() {
   const total = items.length;
   const categories = [...new Set(items.map(i => i.category))].length;
   const barcodes = items.filter(i => i.code).length;
-  const checked = items.filter(i => i.checked).length;
-  const completion = total > 0 ? Math.round((checked / total) * 100) : 0;
+
+  // 今日のアイテムを取得して完了率を計算
+  const todayItems = await getItemsForDate(new Date());
+  const todayTotal = todayItems.length;
+  const todayChecked = todayItems.filter(i => i.checked).length;
+  const completion = todayTotal > 0 ? Math.round((todayChecked / todayTotal) * 100) : 0;
 
   document.getElementById('stat-total').textContent = total;
   document.getElementById('stat-categories').textContent = categories;

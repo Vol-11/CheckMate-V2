@@ -884,7 +884,7 @@ document.getElementById('import-file').addEventListener('change', async e => {
         // UIを再読み込み・再描画
         await loadCategoriesAndInitialize();
         await loadItems();
-        updateDetailedStats();
+        await updateDetailedStats();
         scanResults.clear();
         renderScanResults();
         showStatus(`✅ ${importedItemCount}件のアイテムをインポートしました`, 'success');
