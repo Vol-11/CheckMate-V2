@@ -19,28 +19,75 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Get commit information
+        id: commit_info
+        run: |
+          # 最新のコミット情報を取得
+          commit_hash=$(git rev-parse HEAD)
+          commit_author=$(git log -1 --pretty=format:'%an')
+          commit_msg=$(git log -1 --pretty=format:'%s')
+          commit_body=$(git log -1 --pretty=format:'%b')
+          commit_date=$(git log -1 --pretty=format:'%cd' --date=iso)
+          
+          echo "commit_hash=$commit_hash" >> $GITHUB_OUTPUT
+          echo "commit_author=$commit_author" >> $GITHUB_OUTPUT
+          echo "commit_msg=$commit_msg" >> $GITHUB_OUTPUT
+          echo "commit_date=$commit_date" >> $GITHUB_OUTPUT
+          
+          # コミットボディをファイルに保存（改行対応）
+          echo "$commit_body" > commit_body.txt
+          
+          echo "📝 Commit Info:"
+          echo "  Hash: $commit_hash"
+          echo "  Author: $commit_author"
+          echo "  Message: $commit_msg"
+          echo "  Date: $commit_date"
+
+      - name: Get commits since last release
+        id: commits_since_release
+        run: |
+          # 最新のリリースタグを取得
+          latest_tag=$(git tag -l 'v[0-9a-f]*.[0-9a-f]*.[0-9a-f]*' | sort -V | tail -n1)
+          
+          if [ -z "$latest_tag" ]; then
+            echo "No previous release found"
+            commits_count=1
+            commits_log="Initial release"
+          else
+            # 最新タグから現在までのコミット数と内容を取得
+            commits_count=$(git rev-list ${latest_tag}..HEAD --count)
+            commits_log=$(git log ${latest_tag}..HEAD --pretty=format:'- %s (%h) by %an' --reverse)
+            echo "📋 Commits since $latest_tag ($commits_count commits):"
+            echo "$commits_log"
+          fi
+          
+          echo "commits_count=$commits_count" >> $GITHUB_OUTPUT
+          echo "latest_tag=$latest_tag" >> $GITHUB_OUTPUT
+          
+          # コミットログをファイルに保存
+          echo "$commits_log" > commits_log.txt
+
       - name: Extract version from commit message or increment by 1 (hex)
         id: get_version
         run: |
-          commit_msg="${{ github.event.head_commit.message }}"
-          first_line=$(echo "$commit_msg" | head -n1)
+          commit_msg="${{ steps.commit_info.outputs.commit_msg }}"
           
           # コミットメッセージの最初の行からvx.x.xを抽出（16進数対応）
-          if echo "$first_line" | grep -qE '^v?[0-9a-f]+\.[0-9a-f]+\.[0-9a-f]+'; then
+          if echo "$commit_msg" | grep -qE '^v?[0-9a-f]+\.[0-9a-f]+\.[0-9a-f]+'; then
             # バージョンが見つかった場合
-            version=$(echo "$first_line" | grep -oE '^v?[0-9a-f]+\.[0-9a-f]+\.[0-9a-f]+')
+            version=$(echo "$commit_msg" | grep -oE '^v?[0-9a-f]+\.[0-9a-f]+\.[0-9a-f]+')
             # vがなければ追加
             if [[ ! "$version" =~ ^v ]]; then
               version="v$version"
             fi
             echo "new_tag=$version" >> $GITHUB_OUTPUT
             echo "from_commit=true" >> $GITHUB_OUTPUT
-            echo "Found version in commit message: $version"
+            echo "✅ Found version in commit message: $version"
           else
             # バージョンが見つからなかった場合、既存タグから16進数で1つ繰り上げ
-            prev=$(git tag -l 'v[0-9a-f]*.[0-9a-f]*.[0-9a-f]*' | sort -V | tail -n1)
+            prev="${{ steps.commits_since_release.outputs.latest_tag }}"
             if [ -z "$prev" ]; then
-              new_tag="v0.0.0"
+              new_tag="v0.0.1"
             else
               # vX.Y.Z を16進数として処理
               vers=${prev#v}
@@ -70,24 +117,63 @@ jobs:
             fi
             echo "new_tag=$new_tag" >> $GITHUB_OUTPUT
             echo "from_commit=false" >> $GITHUB_OUTPUT
-            echo "Incremented version by 1 (hex): $new_tag (from $prev)"
+            echo "🔄 Incremented version by 1 (hex): $new_tag (from $prev)"
           fi
 
-      - name: Check if tag already exists
+      - name: Check if tag already exists and handle conflict
         id: check_tag
         run: |
           new_tag="${{ steps.get_version.outputs.new_tag }}"
+          
           if git rev-parse -q --verify "refs/tags/${new_tag}" >/dev/null; then
-            echo "Tag ${new_tag} already exists. Skipping release."
+            echo "⚠️ Tag ${new_tag} already exists."
+            
+            # 既存のタグが存在する場合、自動的に次のバージョンを生成
+            base_tag=${new_tag#v}
+            IFS='.' read -r MA MI PA <<< "$base_tag"
+            
+            ma_dec=$((16#$MA))
+            mi_dec=$((16#$MI))  
+            pa_dec=$((16#$PA))
+            
+            # パッチバージョンを1つ上げる
+            pa_dec=$((pa_dec + 1))
+            
+            if [ $pa_dec -ge 16 ]; then
+              mi_dec=$((mi_dec + pa_dec / 16))
+              pa_dec=$((pa_dec % 16))
+            fi
+            
+            if [ $mi_dec -ge 16 ]; then
+              ma_dec=$((ma_dec + mi_dec / 16))
+              mi_dec=$((mi_dec % 16))
+            fi
+            
+            auto_tag=$(printf "v%x.%x.%x" $ma_dec $mi_dec $pa_dec)
+            echo "🔄 Auto-generating next version: $auto_tag"
             echo "exists=true" >> $GITHUB_OUTPUT
+            echo "auto_tag=$auto_tag" >> $GITHUB_OUTPUT
           else
+            echo "✅ Tag ${new_tag} is available"
             echo "exists=false" >> $GITHUB_OUTPUT
+            echo "auto_tag=$new_tag" >> $GITHUB_OUTPUT
           fi
 
-      - name: Create and push tag
-        if: steps.check_tag.outputs.exists == 'false'
+      - name: Set final tag version
+        id: final_version
         run: |
-          new_tag="${{ steps.get_version.outputs.new_tag }}"
+          if [ "${{ steps.check_tag.outputs.exists }}" == "true" ]; then
+            final_tag="${{ steps.check_tag.outputs.auto_tag }}"
+            echo "Using auto-generated tag: $final_tag"
+          else
+            final_tag="${{ steps.get_version.outputs.new_tag }}"
+            echo "Using original tag: $final_tag"
+          fi
+          echo "tag=$final_tag" >> $GITHUB_OUTPUT
+
+      - name: Create and push tag
+        run: |
+          new_tag="${{ steps.final_version.outputs.tag }}"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           
@@ -98,24 +184,73 @@ jobs:
           fi
           
           git push origin "$new_tag"
+          echo "🏷️ Created and pushed tag: $new_tag"
 
       - name: Create ZIP of current commit
-        if: steps.check_tag.outputs.exists == 'false'
         id: zip
         run: |
-          zipname="site-${{ steps.get_version.outputs.new_tag }}.zip"
+          zipname="site-${{ steps.final_version.outputs.tag }}.zip"
           zip -r "$zipname" . -x "./.git/*" "./.github/*"
           echo "zipname=$zipname" >> $GITHUB_OUTPUT
+          echo "📦 Created ZIP: $zipname"
+
+      - name: Generate release notes
+        id: release_notes
+        run: |
+          tag="${{ steps.final_version.outputs.tag }}"
+          commit_msg="${{ steps.commit_info.outputs.commit_msg }}"
+          commit_author="${{ steps.commit_info.outputs.commit_author }}"
+          commit_hash="${{ steps.commit_info.outputs.commit_hash }}"
+          commit_date="${{ steps.commit_info.outputs.commit_date }}"
+          commits_count="${{ steps.commits_since_release.outputs.commits_count }}"
+          latest_tag="${{ steps.commits_since_release.outputs.latest_tag }}"
+          
+          cat > release_notes.md << EOF
+          ## 📋 Release Information
+          
+          **Version**: $tag  
+          **Release Date**: $(date '+%Y-%m-%d %H:%M:%S JST')  
+          **Commits Included**: $commits_count commits
+          
+          ## 📝 Latest Commit
+          
+          - **Message**: $commit_msg
+          - **Author**: $commit_author
+          - **Hash**: $commit_hash
+          - **Date**: $commit_date
+          
+          ## 📊 Changes Since Last Release
+          
+          EOF
+          
+          if [ -n "$latest_tag" ]; then
+            echo "**Since**: $latest_tag" >> release_notes.md
+            echo "" >> release_notes.md
+            cat commits_log.txt >> release_notes.md
+          else
+            echo "This is the initial release." >> release_notes.md
+          fi
+          
+          echo "" >> release_notes.md
+          echo "## 📦 Assets" >> release_notes.md
+          echo "- Source code archive (ZIP)" >> release_notes.md
+          
+          # コミットボディがある場合は追加
+          if [ -s commit_body.txt ]; then
+            echo "" >> release_notes.md
+            echo "## 📖 Commit Details" >> release_notes.md
+            echo "" >> release_notes.md
+            cat commit_body.txt >> release_notes.md
+          fi
 
       - name: Create GitHub Release
-        if: steps.check_tag.outputs.exists == 'false'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.get_version.outputs.new_tag }}
-          name: Release ${{ steps.get_version.outputs.new_tag }}
+          tag_name: ${{ steps.final_version.outputs.tag }}
+          name: "🚀 Release ${{ steps.final_version.outputs.tag }}"
           draft: false
           prerelease: false
-          generate_release_notes: true
+          body_path: release_notes.md
           files: ${{ steps.zip.outputs.zipname }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
