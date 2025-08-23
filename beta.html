@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="utf-8" />
-  <title>Barcode Scanner Benchmark - Fixed Version</title>
+  <title>Barcode Scanner Benchmark - 最新安定版</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
     :root { color-scheme: light dark; }
@@ -30,9 +30,8 @@
   <div class="row">
     <label>ライブラリ:
       <select id="lib">
-        <option value="quagga2">Quagga2 (推奨・安定版)</option>
-        <option value="zxing">ZXing (最高速・EAN特化)</option>
-        <option value="quagga_alt">Quagga (代替版)</option>
+        <option value="zxing">ZXing (最新・推奨)</option>
+        <option value="quagga2">Quagga2 (安定版)</option>
       </select>
     </label>
 
@@ -59,7 +58,7 @@
     <button id="btnExport" disabled>📄 CSV出力</button>
   </div>
 
-  <div id="status" class="status">待機中...</div>
+  <div id="status" class="status">ライブラリ読み込み中...</div>
 
   <video id="video" playsinline muted></video>
   
@@ -72,17 +71,9 @@
 
   <div id="log"></div>
 
-  <!-- より安定したバージョンを使用 -->
+  <!-- 正しい最新CDN -->
+  <script src="https://unpkg.com/@zxing/library@latest"></script>
   <script src="https://unpkg.com/@ericblade/quagga2@1.7.7/dist/quagga.min.js"></script>
-  <script src="https://unpkg.com/@zxing/library@0.20.0/dist/index.min.js"></script>
-  
-  <!-- Quagga 代替版（より新しい安定版） -->
-  <script src="https://cdn.jsdelivr.net/npm/quagga@0.12.1/dist/quagga.min.js"></script>
-  <script>
-    // グローバル衝突を完全回避
-    window.QuaggaOriginal = window.Quagga;
-    delete window.Quagga;
-  </script>
 
   <script>
     // === ユーティリティ ===
@@ -101,6 +92,20 @@
     let currentStream = null;
     let t0 = 0, t1 = 0, s0 = 0, s1 = 0;
     const results = [];
+
+    // ライブラリ読み込み確認
+    function checkLibraries() {
+      const status = {
+        zxing: typeof window.ZXing !== 'undefined',
+        quagga2: typeof window.Quagga2 !== 'undefined'
+      };
+      
+      log(`📚 ライブラリ状況:`);
+      log(`  ZXing: ${status.zxing ? '✅ 利用可能' : '❌ 読み込み失敗'}`);
+      log(`  Quagga2: ${status.quagga2 ? '✅ 利用可能' : '❌ 読み込み失敗'}`);
+      
+      return status;
+    }
 
     // ログ関数
     const log = (...args) => {
@@ -191,6 +196,10 @@
         scanning: false,
         
         async init() {
+          if (typeof window.ZXing === 'undefined') {
+            throw new Error('ZXing ライブラリが読み込まれていません');
+          }
+          
           t0 = performance.now();
           
           const constraints = getMediaConstraints();
@@ -200,29 +209,37 @@
           
           // EAN-13専用設定で高速化
           const hints = new Map();
-          hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.EAN_13]);
-          hints.set(ZXing.DecodeHintType.TRY_HARDER, false); // 高速化
+          hints.set(window.ZXing.DecodeHintType.POSSIBLE_FORMATS, [window.ZXing.BarcodeFormat.EAN_13]);
+          hints.set(window.ZXing.DecodeHintType.TRY_HARDER, false); // 高速化優先
           
-          this.reader = new ZXing.BrowserMultiFormatReader(hints);
+          this.reader = new window.ZXing.BrowserMultiFormatReader(hints);
           
           t1 = performance.now();
           log(`✅ ZXing 初期化完了 (${(t1-t0).toFixed(1)}ms)`);
         },
         
         async startScan(onDetected) {
-          if (this.scanning) return;
+          if (this.scanning || !this.reader) return;
           
           this.scanning = true;
           s0 = performance.now();
           
-          this.reader.decodeFromVideoElementContinuously(video, (result) => {
-            if (result && this.scanning) {
-              s1 = performance.now();
-              const text = result.getText();
-              onDetected({ text, format: result.getBarcodeFormat() });
-              this.stopScan();
-            }
-          });
+          try {
+            this.reader.decodeFromVideoElementContinuously(video, (result, err) => {
+              if (result && this.scanning) {
+                s1 = performance.now();
+                const text = result.getText();
+                const format = result.getBarcodeFormat();
+                
+                log(`🎯 バーコード検出: ${text}`);
+                onDetected({ text, format });
+                this.stopScan();
+              }
+            });
+          } catch (error) {
+            this.scanning = false;
+            throw error;
+          }
         },
         
         async stopScan() {
@@ -249,6 +266,10 @@
         scanning: false,
         
         async init() {
+          if (typeof window.Quagga2 === 'undefined') {
+            throw new Error('Quagga2 ライブラリが読み込まれていません');
+          }
+          
           t0 = performance.now();
           
           const constraints = getMediaConstraints();
@@ -256,7 +277,7 @@
           video.srcObject = currentStream;
           await video.play();
           
-          // 少し待ってから初期化（video要素の準備完了を確実にする）
+          // video要素の準備完了を待つ
           await new Promise(resolve => setTimeout(resolve, 500));
           
           await new Promise((resolve, reject) => {
@@ -275,10 +296,10 @@
                 patchSize: "medium",
                 halfSample: false // 精度優先
               },
-              numOfWorkers: 2
+              numOfWorkers: navigator.hardwareConcurrency ? Math.min(4, navigator.hardwareConcurrency) : 2
             }, (err) => {
               if (err) {
-                reject(err);
+                reject(new Error(`Quagga2 初期化エラー: ${err.message || err}`));
               } else {
                 this.initialized = true;
                 resolve();
@@ -296,13 +317,17 @@
           this.scanning = true;
           s0 = performance.now();
           
+          // 以前のハンドラをクリア
+          window.Quagga2.offDetected();
+          
           window.Quagga2.onDetected((result) => {
             if (result?.codeResult?.code && this.scanning) {
               s1 = performance.now();
-              onDetected({
-                text: result.codeResult.code,
-                format: result.codeResult.format
-              });
+              const text = result.codeResult.code;
+              const format = result.codeResult.format;
+              
+              log(`🎯 バーコード検出: ${text}`);
+              onDetected({ text, format });
               this.stopScan();
             }
           });
@@ -321,8 +346,11 @@
         async cleanup() {
           await this.stopScan();
           if (this.initialized) {
-            // Quagga2の完全停止（重要）
-            window.Quagga2.stop();
+            try {
+              window.Quagga2.stop();
+            } catch (e) {
+              // 既に停止済みの場合は無視
+            }
             this.initialized = false;
           }
           if (currentStream) {
@@ -330,30 +358,6 @@
             currentStream = null;
           }
           video.srcObject = null;
-        }
-      },
-
-      // Quagga 代替版（問題があった場合の最後の手段）
-      quagga_alt: {
-        initialized: false,
-        scanning: false,
-        
-        async init() {
-          // Quaggaに問題がある場合、ZXingにフォールバック
-          log("⚠️ Quagga は不安定な可能性があります。ZXing を推奨します。");
-          return adapters.zxing.init.call(this);
-        },
-        
-        async startScan(onDetected) {
-          return adapters.zxing.startScan.call(adapters.zxing, onDetected);
-        },
-        
-        async stopScan() {
-          return adapters.zxing.stopScan.call(adapters.zxing);
-        },
-        
-        async cleanup() {
-          return adapters.zxing.cleanup.call(adapters.zxing);
         }
       }
     };
@@ -449,7 +453,7 @@
         
         await currentAdapter.startScan((result) => {
           const scanTime = s1 - s0;
-          log(`🎯 検出成功: ${result.text} (${result.format}) - ${scanTime.toFixed(1)}ms`);
+          log(`📊 検出完了 - 時間: ${scanTime.toFixed(1)}ms`);
           
           setStatus(`検出完了: ${result.text}`, "ok");
           updateButtons("ready");
@@ -489,8 +493,15 @@
     btnExport.onclick = exportResults;
 
     // === 初期化 ===
-    (async () => {
+    window.addEventListener('load', async () => {
       try {
+        // ライブラリ確認
+        const libStatus = checkLibraries();
+        
+        if (!libStatus.zxing && !libStatus.quagga2) {
+          throw new Error('利用可能なライブラリがありません');
+        }
+        
         await updateDeviceList();
         log("🚀 アプリケーション準備完了");
         log("📖 使い方: カメラを選択 → ライブラリを選択 → カメラ起動 → 認識開始");
@@ -500,7 +511,7 @@
         log("❌ 初期化エラー:", error.message);
         setStatus("初期化エラー", "error");
       }
-    })();
+    });
   </script>
 </body>
 </html>
