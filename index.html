@@ -688,107 +688,125 @@ function processVideo(videoElement, canvasElement, animationFrameHolder) {
 }
 
 async function startScanning() {
-  if (isScanning) return;
-  isScanning = true;
-  statusMessage.textContent = '🔧 カメラ初期化中...';
-  statusMessage.className = 'p-3 rounded-lg mb-4 text-center font-medium bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-700';
-  scanBtn.disabled = true;
-  stopBtn.disabled = false;
-  canvas.style.display = 'none';
-  video.style.display = 'block';
+    console.log('startScanning called');
+    if (isScanning) {
+        console.log('startScanning: already scanning, returning');
+        return;
+    }
+    isScanning = true;
+    console.log('startScanning: isScanning set to true');
 
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({ video: { deviceId: selectedDeviceId } });
-    video.srcObject = stream;
+    scanBtn.disabled = true;
+    stopBtn.disabled = false;
     
-    codeReader.decodeFromVideoElement(video, (result, err) => {
-        if (result) {
-            onDetected(result);
-        }
-        if (err && !(err instanceof ZXing.NotFoundException)) {
-            console.error(err);
-            statusMessage.textContent = `❌ エラー: ${err.message}`;
-            statusMessage.className = 'p-3 rounded-lg mb-4 text-center font-medium bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-300 dark:border-red-700';
-        }
-    });
+    try {
+        console.log('startScanning: getting user media');
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { deviceId: selectedDeviceId } });
+        video.srcObject = stream;
+        console.log('startScanning: stream set to video element');
 
-    statusMessage.textContent = '🔍 バーコードを緑枠内に合わせてください';
-    statusMessage.className = 'p-3 rounded-lg mb-4 text-center font-medium bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-700';
-  } catch (err) {
-    console.error(err);
-    statusMessage.textContent = `❌ カメラエラー: ${err.message}`;
-    statusMessage.className = 'p-3 rounded-lg mb-4 text-center font-medium bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-300 dark:border-red-700';
-    isScanning = false;
-    scanBtn.disabled = false;
-    stopBtn.disabled = true;
-  }
+        video.onloadedmetadata = () => {
+            console.log('startScanning: video metadata loaded');
+            video.play().then(() => {
+                console.log('startScanning: video playing');
+                codeReader.decodeFromVideoElement(video, (result, err) => {
+                    if (result) {
+                        console.log('startScanning: barcode detected', result);
+                        onDetected(result);
+                    }
+                    if (err && !(err instanceof ZXing.NotFoundException)) {
+                        console.error('startScanning: decode error', err);
+                    }
+                });
+            }).catch(err => {
+                console.error('startScanning: video play error', err);
+            });
+        };
+    } catch (err) {
+        console.error('startScanning: catch error', err);
+    }
 }
 
 function stopScanning() {
-  if (!isScanning) return;
-  isScanning = false;
-  codeReader.reset();
-  if (video.srcObject) {
-    video.srcObject.getTracks().forEach(track => track.stop());
-  }
-  statusMessage.textContent = '⏹ スキャン停止';
-  statusMessage.className = 'p-3 rounded-lg mb-4 text-center font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600';
-  scanBtn.disabled = false;
-  stopBtn.disabled = true;
-  canvas.style.display = 'block';
-  video.style.display = 'none';
+    console.log('stopScanning called');
+    if (!isScanning) {
+        console.log('stopScanning: not scanning, returning');
+        return;
+    }
+    isScanning = false;
+    console.log('stopScanning: isScanning set to false');
+
+    codeReader.reset();
+    console.log('stopScanning: codeReader reset');
+
+    if (video.srcObject) {
+        video.srcObject.getTracks().forEach(track => track.stop());
+        console.log('stopScanning: video stream stopped');
+    }
+    
+    scanBtn.disabled = false;
+    stopBtn.disabled = true;
 }
 
 async function startCheckScanning() {
-  if (isCheckScanning) return;
-  isCheckScanning = true;
-  checkStatusMessage.textContent = '🔧 カメラ初期化中...';
-  checkStatusMessage.className = 'p-3 rounded-lg mb-4 text-center font-medium bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-700';
-  checkScanBtn.disabled = true;
-  checkStopBtn.disabled = false;
-  checkCanvas.style.display = 'none';
-  checkVideo.style.display = 'block';
+    console.log('startCheckScanning called');
+    if (isCheckScanning) {
+        console.log('startCheckScanning: already scanning, returning');
+        return;
+    }
+    isCheckScanning = true;
+    console.log('startCheckScanning: isCheckScanning set to true');
 
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({ video: { deviceId: checkSelectedDeviceId } });
-    checkVideo.srcObject = stream;
+    checkScanBtn.disabled = true;
+    checkStopBtn.disabled = false;
 
-    codeReader.decodeFromVideoElement(checkVideo, (result, err) => {
-        if (result) {
-            onCheckDetected(result);
-        }
-        if (err && !(err instanceof ZXing.NotFoundException)) {
-            console.error(err);
-            checkStatusMessage.textContent = `❌ エラー: ${err.message}`;
-            checkStatusMessage.className = 'p-3 rounded-lg mb-4 text-center font-medium bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-300 dark:border-red-700';
-        }
-    });
+    try {
+        console.log('startCheckScanning: getting user media');
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { deviceId: checkSelectedDeviceId } });
+        checkVideo.srcObject = stream;
+        console.log('startCheckScanning: stream set to video element');
 
-    checkStatusMessage.textContent = '🔍 バーコードを緑枠内に合わせてください';
-    checkStatusMessage.className = 'p-3 rounded-lg mb-4 text-center font-medium bg-blue-50 dark:bg-blue-900/3d text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-700';
-  } catch (err) {
-    console.error(err);
-    checkStatusMessage.textContent = `❌ カメラエラー: ${err.message}`;
-    checkStatusMessage.className = 'p-3 rounded-lg mb-4 text-center font-medium bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-300 dark:border-red-700';
-    isCheckScanning = false;
-    checkScanBtn.disabled = false;
-    checkStopBtn.disabled = true;
-  }
+        checkVideo.onloadedmetadata = () => {
+            console.log('startCheckScanning: video metadata loaded');
+            checkVideo.play().then(() => {
+                console.log('startCheckScanning: video playing');
+                codeReader.decodeFromVideoElement(checkVideo, (result, err) => {
+                    if (result) {
+                        console.log('startCheckScanning: barcode detected', result);
+                        onCheckDetected(result);
+                    }
+                    if (err && !(err instanceof ZXing.NotFoundException)) {
+                        console.error('startCheckScanning: decode error', err);
+                    }
+                });
+            }).catch(err => {
+                console.error('startCheckScanning: video play error', err);
+            });
+        };
+    } catch (err) {
+        console.error('startCheckScanning: catch error', err);
+    }
 }
 
 function stopCheckScanning() {
-  if (!isCheckScanning) return;
-  isCheckScanning = false;
-  codeReader.reset();
-  if (checkVideo.srcObject) {
-    checkVideo.srcObject.getTracks().forEach(track => track.stop());
-  }
-  checkStatusMessage.textContent = '⏹ スキャン停止';
-  checkStatusMessage.className = 'p-3 rounded-lg mb-4 text-center font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600';
-  checkScanBtn.disabled = false;
-  checkStopBtn.disabled = true;
-  checkCanvas.style.display = 'block';
-  checkVideo.style.display = 'none';
+    console.log('stopCheckScanning called');
+    if (!isCheckScanning) {
+        console.log('stopCheckScanning: not scanning, returning');
+        return;
+    }
+    isCheckScanning = false;
+    console.log('stopCheckScanning: isCheckScanning set to false');
+
+    codeReader.reset();
+    console.log('stopCheckScanning: codeReader reset');
+
+    if (checkVideo.srcObject) {
+        checkVideo.srcObject.getTracks().forEach(track => track.stop());
+        console.log('stopCheckScanning: video stream stopped');
+    }
+
+    checkScanBtn.disabled = false;
+    checkStopBtn.disabled = true;
 }
 
 scanBtn.addEventListener('click', startScanning);
