@@ -36,7 +36,7 @@ async function updateDetailedStats() {
   document.getElementById('stat-categories').textContent = categories;
   document.getElementById('stat-barcodes').textContent = barcodes;
   document.getElementById('stat-completion').textContent = completion + '%';
-
+}
   // データリセット機能
     document.getElementById('reset-all-items-btn').addEventListener('click', async () => {
         if (confirm('全てのアイテムを削除します。本当によろしいですか？\nこの操作は元に戻せません。')) {
@@ -70,5 +70,3 @@ async function updateDetailedStats() {
             showStatus('🏷️ カテゴリをリセットしました', 'success');
         }
     });
-
-}
