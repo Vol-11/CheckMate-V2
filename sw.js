@@ -218,19 +218,20 @@ self.addEventListener('notificationclose', async (event) => {
     }
 
     if (itemsToReNotify.length > 0) {
-        const nextNotifyTime = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes from now
+        const delay = 10 * 60 * 1000; // 10 minutes from now
+        const renotifyTag = `renotify-${Date.now()}`;
 
-        try {
-            await self.registration.showNotification('【未チェックあり】持ち物を確認してください', {
-                tag: `renotify-${Date.now()}`,
+        console.log(`Scheduling re-notification in 10 minutes.`);
+
+        scheduledTimeouts[renotifyTag] = setTimeout(() => {
+            self.registration.showNotification('【未チェックあり】持ち物を確認してください', {
+                tag: renotifyTag,
                 body: `未チェックの重要アイテムがあります: ${itemsToReNotify.join('、')}`,
                 icon: '/CheckMate-V2/icons/icon-192.png',
-                showTrigger: new TimestampTrigger(nextNotifyTime.getTime()),
                 renotify: true, // Allow this to be re-notified again if needed
                 data: { ...data } // Carry over original data
             });
-        } catch (error) {
-            console.error('Error scheduling re-notification:', error);
-        }
+            delete scheduledTimeouts[renotifyTag];
+        }, delay);
     }
 });
