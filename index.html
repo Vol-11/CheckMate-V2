@@ -342,6 +342,38 @@
     </div>
   </div>
 
+  <div id="notification-settings-container" class="hidden bg-white dark:bg-gray-800 rounded-xl p-4 sm:p-6 mb-4 shadow-md">
+    <h3 class="text-lg font-semibold mb-4 flex items-center"><span class="mr-2">🔔</span>通知設定</h3>
+    <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
+      この機能はPWAとしてインストールされている場合にのみ利用可能です。指定した時刻に、翌日の持ち物リストを通知します。
+    </p>
+    <div class="space-y-4">
+      <div class="flex items-center justify-between">
+        <label for="notification-toggle" class="font-medium text-gray-800 dark:text-gray-200">通知を有効にする</label>
+        <label for="notification-toggle" class="relative inline-flex items-center cursor-pointer">
+          <input type="checkbox" id="notification-toggle" class="sr-only peer">
+          <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
+        </label>
+      </div>
+      <div id="notification-options" class="hidden space-y-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+        <div class="flex items-center justify-between">
+          <label for="notification-time" class="font-medium text-gray-800 dark:text-gray-200">通知時刻</label>
+          <input type="time" id="notification-time" class="px-3 py-1 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white">
+        </div>
+        <div class="flex items-center justify-between">
+          <label for="renotify-toggle" class="font-medium text-gray-800 dark:text-gray-200">重要アイテムの再通知</label>
+          <label for="renotify-toggle" class="relative inline-flex items-center cursor-pointer">
+            <input type="checkbox" id="renotify-toggle" class="sr-only peer">
+            <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
+          </label>
+        </div>
+        <p class="text-xs text-gray-500 dark:text-gray-400">
+          「必須」に設定されているアイテムや、よく忘れるアイテムが未チェックの場合、10分おきに再通知します。
+        </p>
+      </div>
+    </div>
+  </div>
+
   <div class="bg-white dark:bg-gray-800 rounded-xl p-4 sm:p-6 mb-4 shadow-md">
     <h3 class="text-lg font-semibold mb-4 flex items-center"><span class="mr-2">⚙️</span>データ管理 (バックアップ)</h3>
     <div class="grid grid-cols-2 gap-2 mb-4">
