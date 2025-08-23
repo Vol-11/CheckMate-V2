@@ -170,10 +170,12 @@ function initializeCalendar() {
 
     document.addEventListener('tabChanged', e => {
         if (e.detail.tab === 'calendar') {
-            // 初回表示時に今日の日付のリストを表示
+            // 初回表示時に明日の日付のリストを表示
             if (isCalendarFirstLoad) {
-                const todayStr = toDateString(new Date());
-                renderDateSpecificChecklist(todayStr);
+                const tomorrow = new Date();
+                tomorrow.setDate(tomorrow.getDate() + 1);
+                const tomorrowStr = toDateString(tomorrow);
+                renderDateSpecificChecklist(tomorrowStr);
                 isCalendarFirstLoad = false;
             }
             renderCalendar();
