@@ -142,6 +142,7 @@ function initializeChecklist() {
                 override.added[itemIndex].checked = isChecked;
                 await saveOverride(override);
                 await updateCheckDisplay(); // リストを再描画
+                await updateStats(); // ヘッダーの統計を更新
             }
         }
     };
