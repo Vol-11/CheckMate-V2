@@ -557,7 +557,7 @@ const checkStatusMessage = document.getElementById('check-status');
 let animationFrameId;
 let checkAnimationFrameId;
 
-const codeReader = new ZXing.BrowserMultiFormatReader();
+const codeReader = new ZXingBrowser.BrowserMultiFormatReader();
 let selectedDeviceId = undefined;
 let checkSelectedDeviceId = undefined;
 
@@ -710,7 +710,7 @@ async function startScanning() {
                 console.log('startScanning: barcode detected', result);
                 onDetected(result);
             }
-            if (err && !(err instanceof ZXing.NotFoundException)) {
+            if (err && !(err instanceof ZXingBrowser.NotFoundException)) {
                 console.error('startScanning: decode error', err);
                 statusMessage.textContent = `❌ エラー: ${err.message}`;
                 stopScanning();
@@ -762,7 +762,7 @@ async function startCheckScanning() {
                 console.log('startCheckScanning: barcode detected', result);
                 onCheckDetected(result);
             }
-            if (err && !(err instanceof ZXing.NotFoundException)) {
+            if (err && !(err instanceof ZXingBrowser.NotFoundException)) {
                 console.error('startCheckScanning: decode error', err);
                 checkStatusMessage.textContent = `❌ エラー: ${err.message}`;
                 stopCheckScanning();
