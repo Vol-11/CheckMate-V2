@@ -6,16 +6,23 @@
     <title>Quagga vs Quagga2 vs ZXing ベンチマーク (EAN-13特化)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://webrtc.github.io/adapter/adapter-latest.js"></script>
-    <script src="https://unpkg.com/quagga@latest/dist/quagga.min.js"></script>
+    <!-- Quagga2を先に読み込み、別名で管理 -->
     <script src="https://unpkg.com/@ericblade/quagga2@latest/dist/quagga.min.js"></script>
+    <script>
+        // Quagga2を別名で保存
+        window.Quagga2Lib = window.Quagga;
+        delete window.Quagga;
+    </script>
+    <!-- 元のQuaggaを読み込み -->
+    <script src="https://unpkg.com/quagga@latest/dist/quagga.min.js"></script>
     <script src="https://unpkg.com/@zxing/library@latest"></script>
     <style>
         #interactive {
             position: relative;
             background: #000;
+            overflow: hidden;
         }
-        #interactive video,
-        #zxingVideo {
+        #interactive video {
             width: 100%;
             height: 100%;
             object-fit: cover;
@@ -31,9 +38,9 @@
             z-index: 10;
         }
         #zxingVideo {
-            position: absolute;
-            top: 0;
-            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
         }
         .viewport {
             position: relative;
@@ -240,6 +247,7 @@
                 this.avgCameraTime = document.getElementById('avgCameraTime');
                 this.avgScanTime = document.getElementById('avgScanTime');
                 this.zxingVideo = document.getElementById('zxingVideo');
+                this.interactive = document.getElementById('interactive');
             }
 
             attachEventListeners() {
@@ -289,9 +297,27 @@
 
             getQuaggaInstance() {
                 if (this.currentLibrary === 'quagga2') {
-                    return window.Quagga2 || window.Quagga;
+                    return window.Quagga2Lib || window.Quagga;
                 }
                 return window.Quagga;
+            }
+
+            // DOM要素を完全にクリア
+            clearQuaggaDom() {
+                // 既存のビデオとキャンバスを削除
+                const videos = this.interactive.querySelectorAll('video:not(#zxingVideo)');
+                const canvases = this.interactive.querySelectorAll('canvas');
+                
+                videos.forEach(video => {
+                    if (video.srcObject) {
+                        const tracks = video.srcObject.getTracks();
+                        tracks.forEach(track => track.stop());
+                        video.srcObject = null;
+                    }
+                    video.remove();
+                });
+                
+                canvases.forEach(canvas => canvas.remove());
             }
 
             async startCamera() {
@@ -333,7 +359,9 @@
 
             async startZXingCamera(startTime, resolution) {
                 this.zxingCodeReader = new ZXing.BrowserMultiFormatReader();
-
+                
+                // Quagga要素を非表示にして、ZXingビデオを表示
+                this.clearQuaggaDom();
                 this.zxingVideo.style.display = 'block';
 
                 const selectedDeviceId = this.cameraSelect.value || undefined;
@@ -362,29 +390,22 @@
             async startQuaggaCamera(startTime, resolution) {
                 const QuaggaLib = this.getQuaggaInstance();
 
-                // ZXingビデオを非表示
+                // ZXingビデオを非表示にして、DOM要素をクリア
                 this.zxingVideo.style.display = 'none';
+                this.clearQuaggaDom();
 
-                // DOM要素をクリア
-                const interactive = document.querySelector('#interactive');
-                const existingVideo = interactive.querySelector('video:not(#zxingVideo)');
-                const existingCanvas = interactive.querySelectorAll('canvas');
-
-                if (existingVideo) {
-                    existingVideo.remove();
-                }
-                existingCanvas.forEach(canvas => canvas.remove());
-
+                // カメラ制約を改善
                 const constraints = {
-                    width: resolution.width,
-                    height: resolution.height,
-                    facingMode: "environment",
-                    aspectRatio: { min: 1, max: 2 }
+                    width: { ideal: resolution.width, min: 480 },
+                    height: { ideal: resolution.height, min: 320 },
+                    aspectRatio: { ideal: 4/3 }
                 };
 
+                // カメラ指定がある場合
                 if (this.cameraSelect.value) {
                     constraints.deviceId = { exact: this.cameraSelect.value };
-                    delete constraints.facingMode;
+                } else {
+                    constraints.facingMode = { ideal: "environment" };
                 }
 
                 // 最適化されたQuagga設定
@@ -392,50 +413,89 @@
                     inputStream: {
                         name: "Live",
                         type: "LiveStream",
-                        target: interactive,
+                        target: this.interactive,
                         constraints: constraints,
                         area: {
-                            top: "0%",
-                            right: "0%",
-                            left: "0%",
-                            bottom: "0%"
-                        }
+                            top: "10%",
+                            right: "10%", 
+                            left: "10%",
+                            bottom: "10%"
+                        },
+                        singleChannel: false // カラーチャンネルを使用
                     },
                     locator: {
                         patchSize: "medium",
                         halfSample: true
                     },
-                    numOfWorkers: Math.min(navigator.hardwareConcurrency || 2, 2),
+                    numOfWorkers: 1, // ワーカー数を1に制限して安定化
+                    frequency: 10, // フレーム処理頻度を下げる
                     decoder: {
-                        readers: ["ean_reader"]
+                        readers: [
+                            {
+                                format: "ean_reader",
+                                config: {}
+                            }
+                        ],
+                        multiple: false
                     },
-                    locate: true
+                    locate: true,
+                    debug: {
+                        drawBoundingBox: true,
+                        showFrequentlyPattern: true,
+                        showPattern: true,
+                        showPatch: false,
+                        showFoundPatches: false,
+                        showSkeleton: false,
+                        showLabels: false,
+                        showPatchLabels: false,
+                        showRemainingPatchLabels: false,
+                        boxFromPatches: {
+                            showTransformed: true,
+                            showTransformedBox: true,
+                            showBB: true
+                        }
+                    }
                 };
 
-                await new Promise((resolve, reject) => {
+                return new Promise((resolve, reject) => {
                     QuaggaLib.init(config, (err) => {
                         if (err) {
                             console.error('Quagga初期化エラー:', err);
-                            reject(err);
+                            reject(new Error(`${this.currentLibrary}の初期化に失敗: ${err.message || err}`));
                             return;
                         }
 
                         try {
                             QuaggaLib.start();
-
-                            // 初期化完了後に時間を測定
+                            
+                            // 少し待ってから時間を測定（ストリーム開始を待つ）
                             setTimeout(() => {
-                                const endTime = performance.now();
-                                const cameraTime = Math.round(endTime - startTime);
-                                this.cameraStartTimeEl.textContent = cameraTime + ' ms';
-                            }, 100);
+                                const video = this.interactive.querySelector('video:not(#zxingVideo)');
+                                if (video && video.videoWidth > 0) {
+                                    const endTime = performance.now();
+                                    const cameraTime = Math.round(endTime - startTime);
+                                    this.cameraStartTimeEl.textContent = cameraTime + ' ms';
+                                    
+                                    this.isScanning = true;
+                                    this.updateButtonStates();
+                                    resolve();
+                                } else {
+                                    // ビデオストリームが正しく開始されていない場合の対応
+                                    setTimeout(() => {
+                                        const endTime = performance.now();
+                                        const cameraTime = Math.round(endTime - startTime);
+                                        this.cameraStartTimeEl.textContent = cameraTime + ' ms (遅延)';
+                                        
+                                        this.isScanning = true;
+                                        this.updateButtonStates();
+                                        resolve();
+                                    }, 1000);
+                                }
+                            }, 500);
 
-                            this.isScanning = true;
-                            this.updateButtonStates();
-                            resolve();
                         } catch (startError) {
                             console.error('Quagga開始エラー:', startError);
-                            reject(startError);
+                            reject(new Error(`${this.currentLibrary}の開始に失敗: ${startError.message || startError}`));
                         }
                     });
                 });
@@ -470,6 +530,9 @@
 
                             QuaggaLib.stop();
                         }
+
+                        // DOM要素をクリア
+                        this.clearQuaggaDom();
                     }
                 } catch (error) {
                     console.error('カメラ停止エラー:', error);
@@ -552,18 +615,21 @@
                 }
 
                 this.scanDetectedHandler = (result) => {
-                    const endTime = performance.now();
-                    const scanTime = Math.round(endTime - this.scanStartTime);
-                    const cameraTime = Math.round(this.scanStartTime - this.cameraStartTime);
+                    // EAN-13のみ受け付ける
+                    if (result.codeResult && result.codeResult.format === "ean_13") {
+                        const endTime = performance.now();
+                        const scanTime = Math.round(endTime - this.scanStartTime);
+                        const cameraTime = Math.round(this.scanStartTime - this.cameraStartTime);
 
-                    this.scanTimeEl.textContent = scanTime + ' ms';
-                    this.resultEl.classList.remove('hidden');
-                    this.resultTextEl.textContent = result.codeResult.code;
+                        this.scanTimeEl.textContent = scanTime + ' ms';
+                        this.resultEl.classList.remove('hidden');
+                        this.resultTextEl.textContent = result.codeResult.code;
 
-                    this.saveMeasurement(cameraTime, scanTime, result.codeResult.code);
+                        this.saveMeasurement(cameraTime, scanTime, result.codeResult.code);
 
-                    QuaggaLib.offDetected(this.scanDetectedHandler);
-                    this.scanDetectedHandler = null;
+                        QuaggaLib.offDetected(this.scanDetectedHandler);
+                        this.scanDetectedHandler = null;
+                    }
                 };
 
                 QuaggaLib.onDetected(this.scanDetectedHandler);
