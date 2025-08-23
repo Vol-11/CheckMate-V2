@@ -53,6 +53,9 @@ jobs:
             local latest_minor=0
             local latest_patch=0
             
+            # デバッグ情報をstderrに出力
+            echo "🔍 Analyzing version tags..." >&2
+            
             # 全てのタグを取得してループ
             for tag in $(git tag -l 'v[0-9a-f]*.[0-9a-f]*.[0-9a-f]*'); do
               # vを除去
@@ -64,7 +67,7 @@ jobs:
               minor_dec=$((16#$minor))
               patch_dec=$((16#$patch))
               
-              echo "🔍 Checking tag: $tag (hex: $major.$minor.$patch -> dec: $major_dec.$minor_dec.$patch_dec)"
+              echo "  Checking: $tag (hex: $major.$minor.$patch -> dec: $major_dec.$minor_dec.$patch_dec)" >&2
               
               # バージョン比較
               if [ $major_dec -gt $latest_major ] || \
@@ -74,10 +77,11 @@ jobs:
                 latest_major=$major_dec
                 latest_minor=$minor_dec
                 latest_patch=$patch_dec
-                echo "✅ New latest: $tag"
+                echo "    ✅ New latest: $tag" >&2
               fi
             done
             
+            # 結果のみをstdoutに出力
             echo "$latest_tag"
           }
           
@@ -299,64 +303,51 @@ jobs:
           commits_count="${{ steps.commits_since_release.outputs.commits_count }}"
           latest_tag="${{ steps.get_latest_tag.outputs.latest_tag }}"
           
-          cat > release_notes.md << 'EOF'
-          ## 📋 Release Information
-          
-          **Version**: TAG_VALUE  
-          **Release Date**: DATE_VALUE  
-          **Commits Included**: COMMITS_COUNT_VALUE commits
-          
-          EOF
-          
-          # バージョン自動調整の説明
-          if [ "$initial_tag" != "$tag" ]; then
-            cat >> release_notes.md << 'EOF'
-          > **Note**: Originally planned as INITIAL_TAG_VALUE, but automatically adjusted to TAG_VALUE due to existing tags.
-          
-          EOF
-          fi
-          
-          cat >> release_notes.md << 'EOF'
-          ## 📝 Latest Commit
-          
-          - **Message**: COMMIT_MSG_VALUE
-          - **Author**: COMMIT_AUTHOR_VALUE
-          - **Hash**: COMMIT_HASH_VALUE
-          - **Date**: COMMIT_DATE_VALUE
-          
-          ## 📊 Changes Since Last Release
-          
-          EOF
-          
-          if [ -n "$latest_tag" ]; then
-            echo "**Since**: $latest_tag" >> release_notes.md
-            echo "" >> release_notes.md
-            cat commits_log.txt >> release_notes.md
-          else
-            echo "This is the initial release." >> release_notes.md
-          fi
-          
-          echo "" >> release_notes.md
-          echo "## 📦 Assets" >> release_notes.md
-          echo "- Source code archive (ZIP)" >> release_notes.md
-          
-          # コミットボディがある場合は追加
-          if [ -s commit_body.txt ]; then
-            echo "" >> release_notes.md
-            echo "## 📖 Commit Details" >> release_notes.md
-            echo "" >> release_notes.md
-            cat commit_body.txt >> release_notes.md
-          fi
-          
-          # 実際の変数を展開（セキュリティのため個別に置換）
-          sed -i "s/TAG_VALUE/$tag/g" release_notes.md
-          sed -i "s/INITIAL_TAG_VALUE/$initial_tag/g" release_notes.md
-          sed -i "s/COMMIT_MSG_VALUE/$commit_msg/g" release_notes.md
-          sed -i "s/COMMIT_AUTHOR_VALUE/$commit_author/g" release_notes.md
-          sed -i "s/COMMIT_HASH_VALUE/$commit_hash/g" release_notes.md
-          sed -i "s/COMMIT_DATE_VALUE/$commit_date/g" release_notes.md
-          sed -i "s/COMMITS_COUNT_VALUE/$commits_count/g" release_notes.md
-          sed -i "s/DATE_VALUE/$(date '+%Y-%m-%d %H:%M:%S JST')/g" release_notes.md
+          # リリースノートをファイルに直接書き込み
+          {
+            echo "## 📋 Release Information"
+            echo ""
+            echo "**Version**: $tag"
+            echo "**Release Date**: $(date '+%Y-%m-%d %H:%M:%S JST')"
+            echo "**Commits Included**: $commits_count commits"
+            echo ""
+            
+            # バージョン自動調整の説明
+            if [ "$initial_tag" != "$tag" ]; then
+              echo "> **Note**: Originally planned as $initial_tag, but automatically adjusted to $tag due to existing tags."
+              echo ""
+            fi
+            
+            echo "## 📝 Latest Commit"
+            echo ""
+            echo "- **Message**: $commit_msg"
+            echo "- **Author**: $commit_author"
+            echo "- **Hash**: $commit_hash"
+            echo "- **Date**: $commit_date"
+            echo ""
+            echo "## 📊 Changes Since Last Release"
+            echo ""
+            
+            if [ -n "$latest_tag" ]; then
+              echo "**Since**: $latest_tag"
+              echo ""
+              cat commits_log.txt
+            else
+              echo "This is the initial release."
+            fi
+            
+            echo ""
+            echo "## 📦 Assets"
+            echo "- Source code archive (ZIP)"
+            
+            # コミットボディがある場合は追加
+            if [ -s commit_body.txt ]; then
+              echo ""
+              echo "## 📖 Commit Details"
+              echo ""
+              cat commit_body.txt
+            fi
+          } > release_notes.md
 
       - name: Create GitHub Release
         if: steps.check_commits.outputs.skip_release == 'false' && steps.find_available_tag.outputs.found == 'true'
