@@ -59,9 +59,9 @@ async function renderCalendar() {
         const today = new Date();
         const todayStr = toDateString(today);
 
-        // 今日の日付にはリングをつける
+        // 今日の日付にはボーダーをつける (リングのギザギザ対策)
         if (dateStr === todayStr) {
-            dayEl.classList.add('ring-2', 'ring-offset-2', 'ring-blue-500', 'dark:ring-offset-gray-800');
+            dayEl.classList.add('border-2', 'border-solid', 'border-blue-500');
         }
 
         // 選択されている日付には青い背景をつける
