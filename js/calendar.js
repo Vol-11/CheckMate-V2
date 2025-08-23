@@ -57,11 +57,16 @@ async function renderCalendar() {
         dayEl.className = 'p-2 rounded-full hover:bg-blue-100 dark:hover:bg-blue-800 transition-colors duration-200';
 
         const today = new Date();
-        if (dateStr === toDateString(today)) {
-            dayEl.classList.add('bg-blue-600', 'text-white', 'font-bold');
+        const todayStr = toDateString(today);
+
+        // 今日の日付にはリングをつける
+        if (dateStr === todayStr) {
+            dayEl.classList.add('ring-2', 'ring-offset-2', 'ring-blue-500', 'dark:ring-offset-gray-800');
         }
+
+        // 選択されている日付には青い背景をつける
         if (dateStr === selectedDate) {
-            dayEl.classList.add('ring-2', 'ring-blue-500');
+            dayEl.classList.add('bg-blue-600', 'text-white', 'font-bold');
         }
         calendarGrid.appendChild(dayEl);
     }
