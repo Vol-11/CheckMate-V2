@@ -561,7 +561,7 @@ const codeReader = new ZXingBrowser.BrowserMultiFormatReader();
 let selectedDeviceId = undefined;
 let checkSelectedDeviceId = undefined;
 
-codeReader.listVideoInputDevices()
+ZXingBrowser.BrowserMultiFormatReader.listVideoInputDevices()
   .then((videoInputDevices) => {
     if (videoInputDevices.length > 0) {
       // 複数のカメラがある場合、ここでユーザーに選択させることも可能
