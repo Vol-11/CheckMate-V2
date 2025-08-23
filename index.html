@@ -490,7 +490,7 @@
 
 </div>
 
-<script type="text/javascript" src="https://unpkg.com/@zxing/library@latest"></script>
+<script type="text/javascript" src="https://unpkg.com/@zxing/browser@latest"></script>
 <script src="js/dark_mode.js"></script>
 <script src="js/indexdb.js"></script>
 <script src="js/global.js"></script>
@@ -698,52 +698,44 @@ async function startScanning() {
 
     scanBtn.disabled = true;
     stopBtn.disabled = false;
-    
-    try {
-        console.log('startScanning: getting user media');
-        const stream = await navigator.mediaDevices.getUserMedia({ video: { deviceId: selectedDeviceId } });
-        video.srcObject = stream;
-        console.log('startScanning: stream set to video element');
+    statusMessage.textContent = '🎥 カメラを起動中...';
 
-        video.onloadedmetadata = () => {
-            console.log('startScanning: video metadata loaded');
-            video.play().then(() => {
-                console.log('startScanning: video playing');
-                codeReader.decodeFromVideoElement(video, (result, err) => {
-                    if (result) {
-                        console.log('startScanning: barcode detected', result);
-                        onDetected(result);
-                    }
-                    if (err && !(err instanceof ZXing.NotFoundException)) {
-                        console.error('startScanning: decode error', err);
-                    }
-                });
-            }).catch(err => {
-                console.error('startScanning: video play error', err);
-            });
-        };
+    try {
+        // reset() を最初に呼んで、前の状態をクリアする
+        codeReader.reset(); 
+        console.log('startScanning: codeReader reset');
+
+        await codeReader.decodeFromVideoDevice(selectedDeviceId, 'video', (result, err) => {
+            if (result) {
+                console.log('startScanning: barcode detected', result);
+                onDetected(result);
+            }
+            if (err && !(err instanceof ZXing.NotFoundException)) {
+                console.error('startScanning: decode error', err);
+                statusMessage.textContent = `❌ エラー: ${err.message}`;
+                stopScanning();
+            }
+        });
+        console.log('startScanning: ZXing decoding started');
+        statusMessage.textContent = '📷 スキャン中...';
     } catch (err) {
         console.error('startScanning: catch error', err);
+        statusMessage.textContent = `❌ カメラの起動に失敗しました: ${err.message}`;
+        isScanning = false;
+        scanBtn.disabled = false;
+        stopBtn.disabled = true;
     }
 }
 
 function stopScanning() {
     console.log('stopScanning called');
-    if (!isScanning) {
-        console.log('stopScanning: not scanning, returning');
-        return;
-    }
     isScanning = false;
     console.log('stopScanning: isScanning set to false');
 
     codeReader.reset();
     console.log('stopScanning: codeReader reset');
-
-    if (video.srcObject) {
-        video.srcObject.getTracks().forEach(track => track.stop());
-        console.log('stopScanning: video stream stopped');
-    }
     
+    statusMessage.textContent = '📷 準備完了 - スキャン開始ボタンを押してください';
     scanBtn.disabled = false;
     stopBtn.disabled = true;
 }
@@ -759,52 +751,43 @@ async function startCheckScanning() {
 
     checkScanBtn.disabled = true;
     checkStopBtn.disabled = false;
+    checkStatusMessage.textContent = '🎥 カメラを起動中...';
 
     try {
-        console.log('startCheckScanning: getting user media');
-        const stream = await navigator.mediaDevices.getUserMedia({ video: { deviceId: checkSelectedDeviceId } });
-        checkVideo.srcObject = stream;
-        console.log('startCheckScanning: stream set to video element');
+        codeReader.reset();
+        console.log('startCheckScanning: codeReader reset');
 
-        checkVideo.onloadedmetadata = () => {
-            console.log('startCheckScanning: video metadata loaded');
-            checkVideo.play().then(() => {
-                console.log('startCheckScanning: video playing');
-                codeReader.decodeFromVideoElement(checkVideo, (result, err) => {
-                    if (result) {
-                        console.log('startCheckScanning: barcode detected', result);
-                        onCheckDetected(result);
-                    }
-                    if (err && !(err instanceof ZXing.NotFoundException)) {
-                        console.error('startCheckScanning: decode error', err);
-                    }
-                });
-            }).catch(err => {
-                console.error('startCheckScanning: video play error', err);
-            });
-        };
+        await codeReader.decodeFromVideoDevice(checkSelectedDeviceId, 'check-video', (result, err) => {
+            if (result) {
+                console.log('startCheckScanning: barcode detected', result);
+                onCheckDetected(result);
+            }
+            if (err && !(err instanceof ZXing.NotFoundException)) {
+                console.error('startCheckScanning: decode error', err);
+                checkStatusMessage.textContent = `❌ エラー: ${err.message}`;
+                stopCheckScanning();
+            }
+        });
+        console.log('startCheckScanning: ZXing decoding started');
+        checkStatusMessage.textContent = '📷 スキャン中...';
     } catch (err) {
         console.error('startCheckScanning: catch error', err);
+        checkStatusMessage.textContent = `❌ カメラの起動に失敗しました: ${err.message}`;
+        isCheckScanning = false;
+        checkScanBtn.disabled = false;
+        checkStopBtn.disabled = true;
     }
 }
 
 function stopCheckScanning() {
     console.log('stopCheckScanning called');
-    if (!isCheckScanning) {
-        console.log('stopCheckScanning: not scanning, returning');
-        return;
-    }
     isCheckScanning = false;
     console.log('stopCheckScanning: isCheckScanning set to false');
 
     codeReader.reset();
     console.log('stopCheckScanning: codeReader reset');
 
-    if (checkVideo.srcObject) {
-        checkVideo.srcObject.getTracks().forEach(track => track.stop());
-        console.log('stopCheckScanning: video stream stopped');
-    }
-
+    checkStatusMessage.textContent = '📷 バーコードを読み取って自動チェック';
     checkScanBtn.disabled = false;
     checkStopBtn.disabled = true;
 }
