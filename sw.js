@@ -1,6 +1,6 @@
 importScripts('js/indexdb.js');
 
-const CACHE_NAME = 'wasuremono-pro-v2.3'; // Cache version updated
+const CACHE_NAME = 'wasuremono-pro-v2.4'; // Cache version updated
 const urlsToCache = [
     '/CheckMate-V2/',
     '/CheckMate-V2/index.html',
@@ -21,6 +21,7 @@ self.addEventListener('install', event => {
             });
         })
     );
+    self.skipWaiting(); // Force the new service worker to activate immediately
 });
 
 self.addEventListener('activate', event => {
