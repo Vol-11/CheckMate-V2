@@ -114,43 +114,59 @@ self.addEventListener('message', (event) => {
     }
 });
 
+// --- Notification Scheduling Logic ---
+
+const scheduledTimeouts = {};
+
 async function scheduleDailyNotification(payload) {
     const { title, body, time, renotify, tag } = payload;
+
+    // Cancel any previously scheduled notification with the same tag
+    if (scheduledTimeouts[tag]) {
+        clearTimeout(scheduledTimeouts[tag]);
+    }
+
     const [hours, minutes] = time.split(':');
+    const now = new Date();
 
     const notificationTime = new Date();
     notificationTime.setHours(parseInt(hours, 10));
     notificationTime.setMinutes(parseInt(minutes, 10));
     notificationTime.setSeconds(0, 0);
 
-    // If the time is in the past for today, schedule it for tomorrow
-    if (notificationTime < new Date()) {
+    if (notificationTime < now) {
         notificationTime.setDate(notificationTime.getDate() + 1);
     }
 
-    try {
-        await self.registration.showNotification(title, {
+    const delay = notificationTime.getTime() - now.getTime();
+
+    if (delay < 0) {
+        console.error('Cannot schedule notification in the past.');
+        return;
+    }
+
+    console.log(`Scheduling daily notification in ${delay / 1000 / 60} minutes.`);
+
+    scheduledTimeouts[tag] = setTimeout(() => {
+        self.registration.showNotification(title, {
             tag: tag,
             body: body,
             icon: '/CheckMate-V2/icons/icon-192.png',
-            showTrigger: new TimestampTrigger(notificationTime.getTime()),
             data: {
                 scheduledTime: notificationTime.toISOString(),
                 renotify: renotify
             }
         });
-        console.log(`Daily notification scheduled for ${notificationTime.toLocaleString()}`);
-    } catch (error) {
-        console.error('Error scheduling daily notification:', error);
-    }
+        delete scheduledTimeouts[tag]; // Clean up after firing
+    }, delay);
 }
 
-async function cancelAllNotifications() {
-    const notifications = await self.registration.getNotifications();
-    for (const notification of notifications) {
-        notification.close();
+function cancelAllNotifications() {
+    for (const tag in scheduledTimeouts) {
+        clearTimeout(scheduledTimeouts[tag]);
+        delete scheduledTimeouts[tag];
     }
-    console.log('All scheduled notifications have been cancelled.');
+    console.log('All scheduled timeouts for notifications have been cancelled.');
 }
 
 self.addEventListener('notificationclick', (event) => {
