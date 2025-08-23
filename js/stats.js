@@ -1,8 +1,12 @@
 // 統計更新
-function updateStats() {
+async function updateStats() {
   const total = items.length;
-  const checked = items.filter(i => i.checked).length;
-  const today = getTodayItems().length;
+
+  // 今日の日付のアイテムを全て取得
+  const todayItems = await getItemsForDate(new Date());
+
+  const checked = todayItems.filter(i => i.checked).length;
+  const today = todayItems.length;
 
   document.getElementById('total-items').textContent = total;
   document.getElementById('checked-items').textContent = checked;

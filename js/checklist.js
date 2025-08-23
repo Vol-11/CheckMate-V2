@@ -1,33 +1,11 @@
-// 日付をYYYY-MM-DD形式の文字列に変換 (calendar.jsからコピー)
-function toDateString(date) {
-    const year = date.getFullYear();
-    const month = (date.getMonth() + 1).toString().padStart(2, '0');
-    const day = date.getDate().toString().padStart(2, '0');
-    return `${year}-${month}-${day}`;
-}
-
 let checklistDate = new Date(); // 現在のチェックリストの日付
 
 // チェック状況表示の統一化
 async function updateCheckDisplay() {
     if (!checklistDate) return;
     const forgottenStats = await getForgottenItemStats();
-    const dateString = toDateString(checklistDate);
-    const dayOfWeek = ['日', '月', '火', '水', '木', '金', '土'][checklistDate.getDay()];
 
-    // overrideを取得
-    const override = await getOverride(dateString) || { added: [], removed: [] };
-
-    // 曜日に基づく通常のアイテムを取得し、overrideを適用
-    const regularItems = items.filter(item => item.days.includes(dayOfWeek) && !override.removed.includes(item.id));
-
-    // 特別なアイテムを追加
-    const specialItems = (override.added || []).map(item => ({
-        ...item,
-        isSpecial: true,
-    }));
-
-    const allItemsForDate = [...regularItems, ...specialItems];
+    const allItemsForDate = await getItemsForDate(checklistDate);
 
     renderChecklist(allItemsForDate, forgottenStats);
     renderScanChecklist(allItemsForDate, forgottenStats);

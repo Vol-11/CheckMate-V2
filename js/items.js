@@ -1,8 +1,31 @@
-// 今日のアイテム取得
-function getTodayItems() {
-  const days = ['日', '月', '火', '水', '木', '金', '土'];
-  const today = days[new Date().getDay()];
-  return items.filter(i => i.days.includes(today));
+// 日付をYYYY-MM-DD形式の文字列に変換
+function toDateString(date) {
+    const year = date.getFullYear();
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const day = date.getDate().toString().padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
+// 指定された日付の全てのアイテム（特別アイテム含む）を取得する
+async function getItemsForDate(targetDate) {
+    if (!targetDate) return [];
+
+    const dateString = toDateString(targetDate);
+    const dayOfWeek = ['日', '月', '火', '水', '木', '金', '土'][targetDate.getDay()];
+
+    // overrideを取得
+    const override = await getOverride(dateString) || { added: [], removed: [] };
+
+    // 曜日に基づく通常のアイテムを取得し、overrideを適用
+    const regularItems = items.filter(item => item.days.includes(dayOfWeek) && !override.removed.includes(item.id));
+
+    // 特別なアイテムを追加
+    const specialItems = (override.added || []).map(item => ({
+        ...item,
+        isSpecial: true,
+    }));
+
+    return [...regularItems, ...specialItems];
 }
 
 // 明日のアイテム取得

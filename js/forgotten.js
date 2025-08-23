@@ -7,7 +7,7 @@ let saveBtn;
 let todayChecklist;
 let forgottenListEl;
 
-function switchForgottenMode(mode) {
+async function switchForgottenMode(mode) {
   if (mode === 'record') {
     recordModeDiv.classList.remove('hidden');
     historyModeDiv.classList.add('hidden');
@@ -15,7 +15,7 @@ function switchForgottenMode(mode) {
     recordTabBtn.classList.remove('text-gray-600', 'dark:text-gray-300', 'hover:bg-gray-200', 'dark:hover:bg-gray-600');
     historyTabBtn.classList.remove('bg-blue-600', 'text-white');
     historyTabBtn.classList.add('text-gray-600', 'dark:text-gray-300', 'hover:bg-gray-200', 'dark:hover:bg-gray-600');
-    renderForgottenRecordingMode();
+    await renderForgottenRecordingMode();
   } else {
     recordModeDiv.classList.add('hidden');
     historyModeDiv.classList.remove('hidden');
@@ -23,12 +23,12 @@ function switchForgottenMode(mode) {
     historyTabBtn.classList.remove('text-gray-600', 'dark:text-gray-300', 'hover:bg-gray-200', 'dark:hover:bg-gray-600');
     recordTabBtn.classList.remove('bg-blue-600', 'text-white');
     recordTabBtn.classList.add('text-gray-600', 'dark:text-gray-300', 'hover:bg-gray-200', 'dark:hover:bg-gray-600');
-    renderForgottenHistoryMode();
+    await renderForgottenHistoryMode();
   }
 }
 
-function renderForgottenRecordingMode() {
-  const todayItems = getTodayItems();
+async function renderForgottenRecordingMode() {
+  const todayItems = await getItemsForDate(new Date());
   if (todayItems.length === 0) {
     todayChecklist.innerHTML = '<li class="text-center text-gray-500 dark:text-gray-400 py-8">今日の予定アイテムはありません</li>';
     return;
@@ -212,8 +212,8 @@ function showUndoToast(message, onUndo) {
 }
 
 function initializeForgottenTab() {
-  recordTabBtn.addEventListener('click', () => switchForgottenMode('record'));
-  historyTabBtn.addEventListener('click', () => switchForgottenMode('history'));
+  recordTabBtn.addEventListener('click', async () => await switchForgottenMode('record'));
+  historyTabBtn.addEventListener('click', async () => await switchForgottenMode('history'));
   saveBtn.addEventListener('click', saveTodayForgottenItems);
   forgottenListEl.addEventListener('click', async (e) => {
     if (e.target.closest('.delete-record-btn')) {
@@ -252,9 +252,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     initializeForgottenTab();
 
-    document.addEventListener('tabChanged', (e) => {
+    document.addEventListener('tabChanged', async (e) => {
         if (e.detail.tab === 'forgotten') {
-            switchForgottenMode('record');
+            await switchForgottenMode('record');
         }
     });
 });
