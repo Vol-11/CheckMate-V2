@@ -189,4 +189,114 @@ jobs:
           fi
 
       - name: Create and push tag
-        if: steps.find_available_tag.outputs.foun
+        if: steps.find_available_tag.outputs.found == 'true'
+        run: |
+          new_tag="${{ steps.verify_tag.outputs.verified_tag }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          
+          echo "🏷️ Creating tag: $new_tag"
+          
+          if [ "${{ steps.get_version.outputs.from_commit }}" == "true" ]; then
+            git tag -a "$new_tag" -m "Release $new_tag (from commit message)"
+          else
+            git tag -a "$new_tag" -m "Release $new_tag (auto-incremented hex)"
+          fi
+          
+          echo "📤 Pushing tag: $new_tag"
+          git push origin "$new_tag"
+          echo "✅ Successfully created and pushed tag: $new_tag"
+
+      - name: Create ZIP of current commit
+        if: steps.find_available_tag.outputs.found == 'true'
+        id: zip
+        run: |
+          zipname="site-${{ steps.verify_tag.outputs.verified_tag }}.zip"
+          zip -r "$zipname" . -x "./.git/*" "./.github/*"
+          echo "zipname=$zipname" >> $GITHUB_OUTPUT
+          echo "📦 Created ZIP: $zipname"
+
+      - name: Generate release notes
+        if: steps.find_available_tag.outputs.found == 'true'
+        id: release_notes
+        run: |
+          tag="${{ steps.verify_tag.outputs.verified_tag }}"
+          initial_tag="${{ steps.get_version.outputs.new_tag }}"
+          commit_msg="${{ steps.commit_info.outputs.commit_msg }}"
+          commit_author="${{ steps.commit_info.outputs.commit_author }}"
+          commit_hash="${{ steps.commit_info.outputs.commit_hash }}"
+          commit_date="${{ steps.commit_info.outputs.commit_date }}"
+          commits_count="${{ steps.commits_since_release.outputs.commits_count }}"
+          latest_tag="${{ steps.commits_since_release.outputs.latest_tag }}"
+          
+          cat > release_notes.md << 'EOF'
+          ## 📋 Release Information
+          
+          **Version**: $tag  
+          **Release Date**: $(date '+%Y-%m-%d %H:%M:%S JST')  
+          **Commits Included**: $commits_count commits
+          
+          EOF
+          
+          # バージョン自動調整の説明
+          if [ "$initial_tag" != "$tag" ]; then
+            cat >> release_notes.md << 'EOF'
+          > **Note**: Originally planned as $initial_tag, but automatically adjusted to $tag due to existing tags.
+          
+          EOF
+          fi
+          
+          cat >> release_notes.md << 'EOF'
+          ## 📝 Latest Commit
+          
+          - **Message**: $commit_msg
+          - **Author**: $commit_author
+          - **Hash**: $commit_hash
+          - **Date**: $commit_date
+          
+          ## 📊 Changes Since Last Release
+          
+          EOF
+          
+          if [ -n "$latest_tag" ]; then
+            echo "**Since**: $latest_tag" >> release_notes.md
+            echo "" >> release_notes.md
+            cat commits_log.txt >> release_notes.md
+          else
+            echo "This is the initial release." >> release_notes.md
+          fi
+          
+          echo "" >> release_notes.md
+          echo "## 📦 Assets" >> release_notes.md
+          echo "- Source code archive (ZIP)" >> release_notes.md
+          
+          # コミットボディがある場合は追加
+          if [ -s commit_body.txt ]; then
+            echo "" >> release_notes.md
+            echo "## 📖 Commit Details" >> release_notes.md
+            echo "" >> release_notes.md
+            cat commit_body.txt >> release_notes.md
+          fi
+          
+          # 実際の変数を展開
+          sed -i "s/\$tag/$tag/g" release_notes.md
+          sed -i "s/\$initial_tag/$initial_tag/g" release_notes.md
+          sed -i "s/\$commit_msg/$commit_msg/g" release_notes.md
+          sed -i "s/\$commit_author/$commit_author/g" release_notes.md
+          sed -i "s/\$commit_hash/$commit_hash/g" release_notes.md
+          sed -i "s/\$commit_date/$commit_date/g" release_notes.md
+          sed -i "s/\$commits_count/$commits_count/g" release_notes.md
+          sed -i "s/\$(date '+%Y-%m-%d %H:%M:%S JST')/$(date '+%Y-%m-%d %H:%M:%S JST')/g" release_notes.md
+
+      - name: Create GitHub Release
+        if: steps.find_available_tag.outputs.found == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.verify_tag.outputs.verified_tag }}
+          name: "🚀 Release ${{ steps.verify_tag.outputs.verified_tag }}"
+          draft: false
+          prerelease: false
+          body_path: release_notes.md
+          files: ${{ steps.zip.outputs.zipname }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
