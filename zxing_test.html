@@ -53,7 +53,7 @@
     /* Tailwind ボタンユーティリティ */
     .tw-btn-primary { @apply px-3 py-2 rounded text-white bg-blue-600 hover:bg-blue-700 disabled:bg-gray-500 transition; }
     .tw-btn-secondary { @apply px-3 py-2 rounded text-gray-700 dark:text-gray-200 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 disabled:bg-gray-500 transition; }
-    .tw-btn-success { @apply px-3 py-2 rounded text-white bg-green-600 hover:bg-green-700 disabled:bg-gray-500 transition; }
+    .tw-btn-success { @apply px-3 py-2 rounded text-white bg-green-600 hover:green-700 disabled:bg-gray-500 transition; }
   </style>
   <script>
     // Utility
@@ -69,23 +69,84 @@
     let currentAdapter = null;
     let currentStream = null;
     let t0 = 0, t1 = 0, s0 = 0, s1 = 0;
+    let deviceListUpdating = false;
     const results = [];
 
-    // アダプター：ZXing専用
+    // ライブラリ読み込み完了を待機する関数
+    async function waitForZXingLibrary(maxWait = 5000) {
+      const start = Date.now();
+      while (typeof window.ZXing === 'undefined') {
+        if (Date.now() - start > maxWait) {
+          throw new Error('ZXingライブラリの読み込みがタイムアウトしました');
+        }
+        await new Promise(r => setTimeout(r, 50));
+      }
+    }
+
+    // 改善されたカメラ初期化関数
+    async function initializeCamera() {
+      // 既存のストリームを確実に停止
+      if (currentStream) {
+        currentStream.getTracks().forEach(track => {
+          track.stop();
+          track.enabled = false;
+        });
+        currentStream = null;
+        video.srcObject = null;
+        // リソースが確実に解放されるのを待つ
+        await new Promise(r => setTimeout(r, 200));
+      }
+      
+      const constraints = getMediaConstraints();
+      currentStream = await navigator.mediaDevices.getUserMedia(constraints);
+      video.srcObject = currentStream;
+      
+      // video要素の準備完了を確実に待つ
+      await new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error('Video準備タイムアウト')), 10000);
+        
+        const checkReady = () => {
+          if (video.readyState >= 2) {
+            clearTimeout(timeout);
+            resolve();
+          } else {
+            setTimeout(checkReady, 100);
+          }
+        };
+        
+        video.addEventListener('loadedmetadata', () => {
+          clearTimeout(timeout);
+          resolve();
+        }, { once: true });
+        
+        checkReady();
+      });
+      
+      await safePlayVideo(video);
+    }
+
+    // アダプター：ZXing専用（修正版）
     const ZXingAdapter = {
       reader: null,
       scanning: false,
       async init() {
-        if (typeof window.ZXing === 'undefined') throw new Error('ZXingライブラリが読み込めませんでした（ネットワーク/CORS/CDN等を確認）');
+        if (typeof window.ZXing === 'undefined') {
+          throw new Error('ZXingライブラリが読み込けませんでした（ネットワーク/CORS/CDN等を確認）');
+        }
+        
         t0 = performance.now();
-        const constraints = getMediaConstraints();
-        currentStream = await navigator.mediaDevices.getUserMedia(constraints);
-        video.srcObject = currentStream;
-        await safePlayVideo(video);
+        
+        // 改善されたカメラ初期化を使用
+        await initializeCamera();
+        
         const hints = new Map();
         hints.set(window.ZXing.DecodeHintType.POSSIBLE_FORMATS, [window.ZXing.BarcodeFormat.EAN_13]);
         hints.set(window.ZXing.DecodeHintType.TRY_HARDER, false);
+        
+        // リーダー作成前に少し待機
+        await new Promise(r => setTimeout(r, 100));
         this.reader = new window.ZXing.BrowserMultiFormatReader(hints);
+        
         t1 = performance.now();
         log(`✅ ZXing初期化完了 (${(t1-t0).toFixed(1)}ms) - EAN-13特化モード`);
       },
@@ -128,6 +189,7 @@
       logView.scrollTop = logView.scrollHeight;
       console.log(...args);
     }
+    
     function setStatus(message, color="blue") {
       const map = {
         blue: { bg: 'bg-blue-100 dark:bg-blue-900 dark:text-blue-200 text-blue-800' },
@@ -138,6 +200,7 @@
       statusView.className = "p-3 rounded text-sm font-semibold " + (map[color]?.bg || map.blue.bg);
       statusView.textContent = message;
     }
+    
     function updateButtons(state) {
       const enable = (b, v) => b.disabled = !v;
       if (state === 'idle') {
@@ -148,6 +211,7 @@
         enable(btnInit, false); enable(btnStart, false); enable(btnStop, true); enable(btnTeardown, false); enable(btnExport, true);
       }
     }
+    
     function getMediaConstraints() {
       const deviceId = $("#device").value;
       const preset = $("#preset").value;
@@ -167,6 +231,7 @@
         }
       };
     }
+    
     async function safePlayVideo(videoElement) {
       try {
         if (videoElement.readyState >= 2) {
@@ -177,25 +242,39 @@
         if (error.name !== 'AbortError') throw error;
       }
     }
+    
+    // 改善されたデバイスリスト更新関数
     async function updateDeviceList() {
+      if (deviceListUpdating) return;
+      deviceListUpdating = true;
+      
       try {
         const tempStream = await navigator.mediaDevices.getUserMedia({video: true});
         tempStream.getTracks().forEach(track => track.stop());
+        
+        // リソースが解放されるのを確実にする
+        await new Promise(r => setTimeout(r, 100));
+        
         const devices = await navigator.mediaDevices.enumerateDevices();
         const cameras = devices.filter(d => d.kind==="videoinput");
         const select = $("#device");
         select.innerHTML = "";
+        
         cameras.forEach(camera => {
           const option = document.createElement("option");
           option.value = camera.deviceId;
           option.textContent = camera.label || `カメラ ${camera.deviceId.slice(0,8)}`;
           select.appendChild(option);
         });
+        
         log(`${cameras.length ? `📷 ${cameras.length}台のカメラを検出`: "⚠️ カメラが見つかりません"}`);
       } catch (e) {
         log("⚠️ カメラアクセス権限が必要です:", e.message);
+      } finally {
+        deviceListUpdating = false;
       }
     }
+    
     function recordMeasurement(data) {
       const record = {
         timestamp: new Date().toISOString(),
@@ -207,6 +286,7 @@
       results.push(record);
       updateButtons(currentAdapter ? "ready" : "idle");
     }
+    
     function exportResults() {
       if (!results.length) {
         log("⚠️ 出力可能な結果がありません"); return;
@@ -235,29 +315,37 @@
       URL.revokeObjectURL(url);
       log(`📄 ${results.length}件の結果をCSVでエクスポートしました`);
     }
+
     // イベントハンドラ
     btnInit.onclick = async () => {
       try {
-        setStatus("初期化中...", "yellow"); updateButtons("idle");
+        setStatus("初期化中...", "yellow"); 
+        updateButtons("idle");
         if (currentAdapter) await currentAdapter.cleanup();
-        currentAdapter = ZXingAdapter; t0=t1=s0=s1=0;
+        currentAdapter = ZXingAdapter; 
+        t0=t1=s0=s1=0;
         await currentAdapter.init();
         setStatus("ZXingカメラ準備完了 - 認識開始ボタンを押してください", "green");
         updateButtons("ready");
         recordMeasurement({init_time_ms:(t1-t0).toFixed(1),scan_time_ms:"",detected_text:"",format:"",is_isbn:false});
       } catch (e) {
-        log("❌ 初期化エラー:", e.message); setStatus("初期化失敗", "red"); updateButtons("idle");
+        log("❌ 初期化エラー:", e.message); 
+        setStatus("初期化失敗", "red"); 
+        updateButtons("idle");
       }
     };
+    
     btnStart.onclick = async () => {
       if (!currentAdapter) return;
       try {
         setStatus("📱 スキャン中 - バーコードをカメラに向けてください", "yellow");
-        updateButtons("scanning"); s0=s1=0;
+        updateButtons("scanning"); 
+        s0=s1=0;
         await currentAdapter.startScan((result) => {
           const scanTime = s1-s0;
           log(`⚡ 認識完了: ${scanTime.toFixed(1)}ms で検出`);
-          setStatus(`✅ 検出完了: ${result.text}`, "green"); updateButtons("ready");
+          setStatus(`✅ 検出完了: ${result.text}`, "green"); 
+          updateButtons("ready");
           recordMeasurement({
             init_time_ms: (t1-t0).toFixed(1),
             scan_time_ms: scanTime.toFixed(1),
@@ -267,27 +355,39 @@
           });
         });
       } catch (e) {
-        log("❌ スキャンエラー:", e.message); setStatus("スキャン失敗", "red"); updateButtons("ready");
+        log("❌ スキャンエラー:", e.message); 
+        setStatus("スキャン失敗", "red"); 
+        updateButtons("ready");
       }
     };
+    
     btnStop.onclick = async () => {
       if (currentAdapter) {
         await currentAdapter.stopScan();
-        setStatus("スキャン停止", "blue"); updateButtons("ready"); log("⏹️ スキャンを停止しました");
+        setStatus("スキャン停止", "blue"); 
+        updateButtons("ready"); 
+        log("⏹️ スキャンを停止しました");
       }
     };
+    
     btnTeardown.onclick = async () => {
       if (currentAdapter) {
         await currentAdapter.cleanup();
         currentAdapter = null;
-        setStatus("解放完了 - 新しいテストが可能です", "blue"); updateButtons("idle"); log("🗑️ リソースを解放しました");
+        setStatus("解放完了 - 新しいテストが可能です", "blue"); 
+        updateButtons("idle"); 
+        log("🗑️ リソースを解放しました");
       }
     };
+    
     btnExport.onclick = exportResults;
+    
+    // 修正されたwindow.onloadイベントハンドラ
     window.addEventListener('load', async () => {
       try {
-        await new Promise(r => setTimeout(r, 100));
-        if (typeof window.ZXing === 'undefined') throw new Error('ZXingライブラリの読み込み失敗');
+        // ライブラリ読み込み完了を確実に待機
+        await waitForZXingLibrary();
+        
         await updateDeviceList();
         log("🚀 アプリケーション準備完了");
         log("📖 使用方法: 1.カメラ選択 2.解像度選択 3.カメラ起動 → 認識開始");
@@ -295,7 +395,8 @@
         setStatus("準備完了 - カメラを起動してください", "blue");
         updateButtons("idle");
       } catch (e) {
-        log("❌ 初期化エラー:", e.message); setStatus("初期化エラー - ページを再読み込みしてください", "red");
+        log("❌ 初期化エラー:", e.message); 
+        setStatus("初期化エラー - ページを再読み込みしてください", "red");
       }
     });
   </script>
