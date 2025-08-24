@@ -9,7 +9,6 @@ on:
 permissions:
   contents: write
   actions: read
-  workflows: write
   pull-requests: write
   issues: write
   repository-projects: write
