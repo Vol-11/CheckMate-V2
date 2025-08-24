@@ -759,9 +759,13 @@ function scanLoop() {
                 onDetected(result);
             }
         } catch (err) {
-            if (!(err instanceof ZXing.NotFoundException)) {
+            // エラーメッセージで判定する方法に変更
+            if (!(err instanceof ZXing.NotFoundException) &&
+                !err.message?.includes('No MultiFormat Readers were able to detect the code') &&
+                !err.message?.includes('NotFoundException')) {
                 console.error('Scan error:', err);
             }
+            // バーコードが見つからないエラーは無視（正常動作）
         }
     }
     animationFrameId = requestAnimationFrame(scanLoop);
@@ -837,9 +841,13 @@ function checkScanLoop() {
                 onCheckDetected(result);
             }
         } catch (err) {
-            if (!(err instanceof ZXing.NotFoundException)) {
+            // エラーメッセージで判定する方法に変更
+            if (!(err instanceof ZXing.NotFoundException) &&
+                !err.message?.includes('No MultiFormat Readers were able to detect the code') &&
+                !err.message?.includes('NotFoundException')) {
                 console.error('Check scan error:', err);
             }
+            // バーコードが見つからないエラーは無視（正常動作）
         }
     }
     checkAnimationFrameId = requestAnimationFrame(checkScanLoop);
