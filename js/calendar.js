@@ -384,8 +384,8 @@ async function startCalendarScanning() {
     try {
         const constraints = {
             video: {
-                width: { ideal: 640 },
-                height: { ideal: 480 },
+                width: { ideal: 818 },        // 他と同じに変更
+                height: { ideal: 460 },       // 他と同じに変更
                 deviceId: calendarSelectedDeviceId ? { exact: calendarSelectedDeviceId } : undefined,
                 facingMode: !calendarSelectedDeviceId ? 'environment' : undefined
             }

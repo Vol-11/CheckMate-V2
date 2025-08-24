@@ -60,7 +60,7 @@
 
 <!-- ヘッダー -->
 <header class="relative bg-gradient-to-r from-blue-600 to-blue-700 dark:from-blue-700 dark:to-blue-800 text-white p-4 sm:p-6 rounded-xl text-center mb-4 shadow-lg">
-  <h1 class="text-xl sm:text-2xl font-bold">CheckMate v2α2</h1>
+  <h1 class="text-xl sm:text-2xl font-bold">CheckMate v2γ</h1>
   <p class="text-blue-100 dark:text-blue-200">教材・持ち物をまとめて管理！</p>
   
   <!-- ダークモード切り替えボタン -->
@@ -124,45 +124,44 @@
         <ul id="date-specific-checklist" class="space-y-2 mb-4">
             <!-- Checklist for the selected date will be rendered here -->
         </ul>
-<!-- カレンダータブ内の特別アイテム追加部分を置き換え -->
-<div class="flex gap-2 mb-4">
-  <input type="text" id="special-item-name" placeholder="この日だけの持ち物を追加" class="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white">
-  <button id="add-special-item-btn" class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors">➕ 追加</button>
-</div>
+        <!-- カレンダータブ内の特別アイテム追加部分を置き換え -->
+        <div class="flex gap-2 mb-4">
+          <input type="text" id="special-item-name" placeholder="この日だけの持ち物を追加" class="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white">
+          <button id="add-special-item-btn" class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors">➕ 追加</button>
+        </div>
 
-<!-- バーコードスキャナー追加 -->
-<div class="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-4 mb-4">
-  <h4 class="text-sm font-semibold mb-3 flex items-center"><span class="mr-2">📱</span>バーコードで追加</h4>
+        <!-- バーコードスキャナー追加 -->
+        <div class="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-4 mb-4">
+          <h4 class="text-sm font-semibold mb-3 flex items-center"><span class="mr-2">📱</span>バーコードで追加</h4>
 
-  <!-- スキャンモード選択 -->
-  <div class="flex bg-gray-100 dark:bg-gray-700 rounded-lg mb-3 overflow-hidden border border-gray-300 dark:border-gray-600">
-    <button class="calendar-scan-mode-btn flex-1 py-2 px-3 text-sm font-medium transition-all duration-200 bg-blue-600 text-white" data-mode="manual">✋ 手動入力</button>
-    <button class="calendar-scan-mode-btn flex-1 py-2 px-3 text-sm font-medium transition-all duration-200 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600" data-mode="scan">📱 バーコード</button>
-  </div>
+          <!-- スキャンモード選択 -->
+          <div class="flex bg-gray-100 dark:bg-gray-700 rounded-lg mb-3 overflow-hidden border border-gray-300 dark:border-gray-600">
+            <button class="calendar-scan-mode-btn flex-1 py-2 px-3 text-sm font-medium transition-all duration-200 bg-blue-600 text-white" data-mode="manual">✋ 手動入力</button>
+            <button class="calendar-scan-mode-btn flex-1 py-2 px-3 text-sm font-medium transition-all duration-200 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600" data-mode="scan">📱 バーコード</button>
+          </div>
 
-  <!-- 手動入力モード -->
-  <div id="calendar-manual-mode">
-    <div class="flex gap-2">
-      <input type="text" id="special-item-barcode" placeholder="バーコードを手入力" class="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white text-sm">
-      <button id="add-special-barcode-btn" class="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors text-sm">📖 登録</button>
-    </div>
-  </div>
+          <!-- 手動入力モード -->
+          <div id="calendar-manual-mode">
+            <div class="flex gap-2">
+              <input type="text" id="special-item-barcode" placeholder="バーコードを手入力" class="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white text-sm">
+              <button id="add-special-barcode-btn" class="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors text-sm">📖 登録</button>
+            </div>
+          </div>
 
-  <!-- スキャンモード -->
-  <div id="calendar-scan-mode" class="hidden">
-    <div id="calendar-viewport" class="relative w-full h-48 border-2 border-blue-600 dark:border-blue-400 rounded-lg overflow-hidden bg-black mb-3">
-      <video id="calendar-video" class="w-full h-full object-cover"></video>
-      <canvas id="calendar-canvas" class="absolute top-0 left-0 w-full h-full"></canvas>
-      <div class="guide absolute top-[20%] left-[15%] right-[15%] bottom-[20%] border-4 border-dashed border-green-400 bg-green-400/10 pointer-events-none rounded-lg"></div>
-    </div>
-    <div id="calendar-status" class="p-2 rounded-lg mb-3 text-center text-sm font-medium bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-700">📷 バーコードをスキャンして登録</div>
-    <div class="text-center">
-      <button id="calendar-scan-btn" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors text-sm mr-2">🚀 スキャン開始</button>
-      <button id="calendar-stop-btn" class="px-4 py-2 bg-gray-600 text-white rounded-lg font-medium transition-colors text-sm disabled:bg-gray-400 disabled:cursor-not-allowed" disabled>⏹ 停止</button>
-    </div>
-  </div>
-</div>
-
+          <!-- スキャンモード -->
+          <div id="calendar-scan-mode" class="hidden">
+            <div id="calendar-viewport" class="relative w-full h-64 border-2 border-blue-600 dark:border-blue-400 rounded-lg overflow-hidden bg-black mb-3">
+              <video id="calendar-video" class="w-full h-full object-cover"></video>
+              <canvas id="calendar-canvas" class="absolute top-0 left-0 w-full h-full"></canvas>
+              <div class="guide absolute top-[20%] left-[15%] right-[15%] bottom-[20%] border-4 border-dashed border-green-400 bg-green-400/10 pointer-events-none rounded-lg"></div>
+            </div>
+            <div id="calendar-status" class="p-2 rounded-lg mb-3 text-center text-sm font-medium bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-700">📷 バーコードをスキャンして登録</div>
+            <div class="text-center">
+              <button id="calendar-scan-btn" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors text-sm mr-2">🚀 スキャン開始</button>
+              <button id="calendar-stop-btn" class="px-4 py-2 bg-gray-600 text-white rounded-lg font-medium transition-colors text-sm disabled:bg-gray-400 disabled:cursor-not-allowed" disabled>⏹ 停止</button>
+            </div>
+          </div>
+        </div>
     </div>
 </div>
 
