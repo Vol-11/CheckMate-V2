@@ -3,62 +3,131 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ZXing-WASM 高速バーコードスキャナー</title>
+    <title>ZXing-WASM 高速バーコードスキャナー (修正版)</title>
     <style>
         body {
             font-family: Arial, sans-serif;
             max-width: 800px;
             margin: 0 auto;
             padding: 20px;
+            background: #f5f5f5;
         }
         .container {
             text-align: center;
         }
-        #video {
+        #liveCanvas {
             max-width: 100%;
-            border: 2px solid #ddd;
+            border: 3px solid #007bff;
+            border-radius: 8px;
             margin: 10px 0;
-        }
-        #canvas, #processedCanvas {
-            max-width: 100%;
-            border: 2px solid #ddd;
-            margin: 10px 0;
-        }
-        #processedCanvas {
-            border-color: #007bff;
-            background: #f8f9fa;
+            background: #000;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
         }
         .controls {
             margin: 20px 0;
         }
         button {
             margin: 5px;
-            padding: 10px 20px;
+            padding: 12px 24px;
             font-size: 16px;
             cursor: pointer;
+            border: none;
+            border-radius: 6px;
+            transition: all 0.3s ease;
+        }
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .btn-primary {
+            background: #007bff;
+            color: white;
+        }
+        .btn-primary:hover:not(:disabled) {
+            background: #0056b3;
+        }
+        .btn-success {
+            background: #28a745;
+            color: white;
+        }
+        .btn-success:hover:not(:disabled) {
+            background: #1e7e34;
+        }
+        .btn-danger {
+            background: #dc3545;
+            color: white;
+        }
+        .btn-danger:hover:not(:disabled) {
+            background: #c82333;
+        }
+        .btn-warning {
+            background: #ffc107;
+            color: #212529;
+        }
+        .btn-warning:hover:not(:disabled) {
+            background: #e0a800;
         }
         .result {
             margin: 20px 0;
-            padding: 10px;
-            background-color: #f0f0f0;
-            border-radius: 5px;
+            padding: 15px;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
         #fileInput {
             margin: 10px 0;
         }
         .error {
-            color: red;
+            color: #dc3545;
+            font-weight: bold;
         }
         .success {
-            color: green;
+            color: #28a745;
+            font-weight: bold;
         }
         .info {
-            color: blue;
+            color: #17a2b8;
+            font-weight: bold;
         }
-        .performance-info {
-            background: #e3f2fd;
+        .timing-info {
+            background: #e8f4fd;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+            border-left: 4px solid #007bff;
+        }
+        .timing-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 10px;
+            margin-top: 10px;
+        }
+        .timing-item {
+            background: white;
             padding: 10px;
-            border-radius: 5px;
+            border-radius: 6px;
+            border: 1px solid #dee2e6;
+        }
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        .status-ready { background: #28a745; }
+        .status-scanning { background: #ffc107; animation: pulse 1s infinite; }
+        .status-error { background: #dc3545; }
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+        .debug-info {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 6px;
+            padding: 10px;
             margin: 10px 0;
             font-size: 14px;
         }
@@ -68,24 +137,21 @@
     <div class="container">
         <h1>ZXing-WASM 高速バーコードスキャナー</h1>
 
-        <div class="performance-info">
-            <strong>最適化:</strong> 480p解像度 + 白黒フィルタ + willReadFrequently最適化
-        </div>
-
-        <!-- カメラスキャン -->
+        <!-- リアルタイム白黒映像表示 -->
         <div>
-            <h2>カメラでスキャン</h2>
-            <video id="video" width="640" height="480" autoplay muted playsinline></video>
-            <br>
-            <strong>処理済み画像 (白黒フィルタ適用):</strong>
-            <canvas id="processedCanvas" width="640" height="480"></canvas>
-            <canvas id="canvas" width="640" height="480" style="display: none;"></canvas>
+            <h2><span id="statusIndicator" class="status-indicator"></span>リアルタイム白黒映像</h2>
+            <canvas id="liveCanvas" width="640" height="480"></canvas>
+            <!-- デバッグ情報 -->
+            <div id="debugInfo" class="debug-info">
+                映像状態: <span id="videoStatus">待機中</span> |
+                フレーム更新: <span id="frameCount">0</span>
+            </div>
 
             <div class="controls">
-                <button id="startCamera">カメラ開始</button>
-                <button id="stopCamera">カメラ停止</button>
-                <button id="scanFromCamera">単発スキャン</button>
-                <button id="continuousMode">連続スキャン開始</button>
+                <button id="startCamera" class="btn-success">📹 カメラ開始</button>
+                <button id="stopCamera" class="btn-danger" disabled>⏹ カメラ停止</button>
+                <button id="scanFromCamera" class="btn-primary" disabled>🔍 単発スキャン</button>
+                <button id="continuousMode" class="btn-warning" disabled>🔄 連続スキャン開始</button>
             </div>
         </div>
 
@@ -93,18 +159,36 @@
         <div>
             <h2>ファイルからスキャン</h2>
             <input type="file" id="fileInput" accept="image/*">
-            <button id="scanFromFile">ファイルをスキャン</button>
+            <button id="scanFromFile" class="btn-primary">📁 ファイルをスキャン</button>
+        </div>
+
+        <!-- タイミング情報 -->
+        <div class="timing-info">
+            <h3>⏱ パフォーマンス測定</h3>
+            <div class="timing-grid">
+                <div class="timing-item">
+                    <strong>カメラ起動時間:</strong><br>
+                    <span id="cameraStartTime">未測定</span>
+                </div>
+                <div class="timing-item">
+                    <strong>画像処理時間:</strong><br>
+                    <span id="processTime">未測定</span>
+                </div>
+                <div class="timing-item">
+                    <strong>スキャン時間:</strong><br>
+                    <span id="scanTime">未測定</span>
+                </div>
+                <div class="timing-item">
+                    <strong>総認識時間:</strong><br>
+                    <span id="totalTime">未測定</span>
+                </div>
+            </div>
         </div>
 
         <!-- 結果表示 -->
         <div id="result" class="result">
-            <h3>スキャン結果</h3>
+            <h3>🎯 スキャン結果</h3>
             <div id="resultContent">結果がここに表示されます</div>
-        </div>
-
-        <!-- パフォーマンス情報 -->
-        <div id="performance" class="performance-info">
-            <strong>パフォーマンス:</strong> <span id="performanceText">待機中...</span>
         </div>
     </div>
 
@@ -117,16 +201,24 @@
         let stream = null;
         let scanning = false;
         let scanInterval = null;
-        let lastScanTime = 0;
+        let liveProcessInterval = null;
+        let frameCount = 0;
+
+        // 隠されたビデオ要素（プログラムで作成）
+        const video = document.createElement('video');
+        video.width = 640;
+        video.height = 480;
+        video.autoplay = true;
+        video.muted = true;
+        video.playsInline = true;
+
+        // タイミング測定用
+        let cameraStartTime = 0;
+        let scanStartTime = 0;
 
         // DOM要素の取得
-        const video = document.getElementById('video');
-        const canvas = document.getElementById('canvas');
-        const processedCanvas = document.getElementById('processedCanvas');
-
-        // Canvas 2D contexts with willReadFrequently optimization
-        const ctx = canvas.getContext('2d', { willReadFrequently: true });
-        const processedCtx = processedCanvas.getContext('2d', { willReadFrequently: true });
+        const liveCanvas = document.getElementById('liveCanvas');
+        const liveCtx = liveCanvas.getContext('2d', { willReadFrequently: true });
 
         const startCameraBtn = document.getElementById('startCamera');
         const stopCameraBtn = document.getElementById('stopCamera');
@@ -135,17 +227,40 @@
         const fileInput = document.getElementById('fileInput');
         const scanFromFileBtn = document.getElementById('scanFromFile');
         const resultContent = document.getElementById('resultContent');
-        const performanceText = document.getElementById('performanceText');
+        const statusIndicator = document.getElementById('statusIndicator');
+
+        // デバッグ表示要素
+        const videoStatusEl = document.getElementById('videoStatus');
+        const frameCountEl = document.getElementById('frameCount');
+
+        // タイミング表示要素
+        const cameraStartTimeEl = document.getElementById('cameraStartTime');
+        const processTimeEl = document.getElementById('processTime');
+        const scanTimeEl = document.getElementById('scanTime');
+        const totalTimeEl = document.getElementById('totalTime');
+
+        // ステータス更新
+        function updateStatus(status) {
+            statusIndicator.className = `status-indicator status-${status}`;
+        }
+
+        // デバッグ情報更新
+        function updateDebugInfo(videoStatus, frameCount) {
+            videoStatusEl.textContent = videoStatus;
+            frameCountEl.textContent = frameCount;
+        }
 
         // ZXing-WASM モジュールの初期化
         async function initZXing() {
             try {
                 zxingModule = await ZXingWASM.getZXingModule();
                 console.log('ZXing-WASM initialized successfully');
-                displayResult('ZXing-WASMが正常に初期化されました', 'success');
+                displayResult('✅ ZXing-WASMが正常に初期化されました', 'success');
+                updateStatus('ready');
             } catch (error) {
                 console.error('Failed to initialize ZXing-WASM:', error);
-                displayResult('ZXing-WASMの初期化に失敗しました: ' + error.message, 'error');
+                displayResult('❌ ZXing-WASMの初期化に失敗しました: ' + error.message, 'error');
+                updateStatus('error');
             }
         }
 
@@ -154,72 +269,107 @@
             resultContent.innerHTML = `<div class="${type}">${message}</div>`;
         }
 
-        // パフォーマンス表示更新
-        function updatePerformance(scanTime, processTime) {
-            performanceText.textContent = `スキャン時間: ${scanTime}ms | 画像処理時間: ${processTime}ms`;
-        }
-
-        // 480p白黒フィルタ処理（高速化版）
-        function processImageToGrayscale(sourceCanvas, targetCanvas, targetCtx) {
-            const startTime = performance.now();
-
-            // 480p解像度に最適化 (640x480)
-            const width = 640;
-            const height = 480;
-
-            // ソースキャンバスから画像データを取得
-            targetCtx.drawImage(sourceCanvas, 0, 0, width, height);
-            const imageData = targetCtx.getImageData(0, 0, width, height);
-            const data = imageData.data;
-
-            // 高速白黒変換（輝度計算式使用）
-            for (let i = 0; i < data.length; i += 4) {
-                // 人間の視覚特性に基づいた重み付け輝度計算
-                const gray = Math.round(
-                    0.299 * data[i] +     // R
-                    0.587 * data[i + 1] + // G
-                    0.114 * data[i + 2]   // B
-                );
-
-                data[i] = gray;       // R
-                data[i + 1] = gray;   // G
-                data[i + 2] = gray;   // B
-                // Alpha値はそのまま保持
+        // タイミング情報更新
+        function updateTimingInfo(cameraTime, processTime, scanTime, totalTime) {
+            if (cameraTime !== undefined) {
+                cameraStartTimeEl.textContent = `${cameraTime}ms`;
             }
-
-            // 処理された画像データを描画
-            targetCtx.putImageData(imageData, 0, 0);
-
-            const processTime = performance.now() - startTime;
-            return { imageData, processTime };
+            if (processTime !== undefined) {
+                processTimeEl.textContent = `${processTime}ms`;
+            }
+            if (scanTime !== undefined) {
+                scanTimeEl.textContent = `${scanTime}ms`;
+            }
+            if (totalTime !== undefined) {
+                totalTimeEl.textContent = `${totalTime}ms`;
+            }
         }
 
-        // バーコード結果を表示
-        function displayBarcodeResults(results, scanTime, processTime) {
-            updatePerformance(scanTime, processTime);
-
-            if (results.length === 0) {
-                displayResult('バーコードが見つかりませんでした', 'error');
+        // 白黒フィルタ処理（修正版：video要素から直接処理）
+        function processToGrayscale() {
+            if (!stream || video.readyState < 2) {
+                updateDebugInfo('待機中...', frameCount);
                 return;
             }
 
-            let html = '<h4>検出されたバーコード:</h4>';
+            const processStart = performance.now();
+
+            try {
+                // ビデオから直接キャンバスに描画
+                liveCtx.drawImage(video, 0, 0, 640, 480);
+
+                // 画像データ取得と白黒変換
+                const imageData = liveCtx.getImageData(0, 0, 640, 480);
+                const data = imageData.data;
+
+                // 高速白黒変換
+                for (let i = 0; i < data.length; i += 4) {
+                    const gray = Math.round(
+                        0.299 * data[i] +     // R
+                        0.587 * data[i + 1] + // G
+                        0.114 * data[i + 2]   // B
+                    );
+
+                    data[i] = gray;       // R
+                    data[i + 1] = gray;   // G
+                    data[i + 2] = gray;   // B
+                    // Alpha値はそのまま
+                }
+
+                // 処理された画像データを描画
+                liveCtx.putImageData(imageData, 0, 0);
+
+                frameCount++;
+                const processTime = performance.now() - processStart;
+                updateTimingInfo(undefined, Math.round(processTime), undefined, undefined);
+                updateDebugInfo('描画中', frameCount);
+
+            } catch (error) {
+                console.error('Frame processing error:', error);
+                updateDebugInfo('エラー', frameCount);
+            }
+        }
+
+        // バーコード結果を表示
+        function displayBarcodeResults(results, scanTime, totalTime) {
+            updateTimingInfo(undefined, undefined, Math.round(scanTime), Math.round(totalTime));
+
+            if (results.length === 0) {
+                displayResult('❌ バーコードが見つかりませんでした', 'error');
+                return;
+            }
+
+            let html = '<h4>🎉 検出されたバーコード:</h4>';
             results.forEach((result, index) => {
+                let icon = '📄';
+                if (result.format.includes('QR')) icon = '🔳';
+                else if (result.format.includes('EAN')) icon = '📊';
+                else if (result.format.includes('Code')) icon = '📋';
+
                 html += `
-                    <div style="border: 1px solid #ccc; margin: 10px 0; padding: 10px;">
-                        <strong>バーコード ${index + 1}:</strong><br>
-                        <strong>フォーマット:</strong> ${result.format}<br>
-                        <strong>データ:</strong> <code>${result.text}</code><br>
-                        <strong>品質:</strong> ${result.quality || 'N/A'}<br>
+                    <div style="border: 2px solid #28a745; margin: 15px 0; padding: 15px; border-radius: 8px; background: #f8fff9;">
+                        <strong>${icon} バーコード ${index + 1}:</strong><br>
+                        <strong>📌 フォーマット:</strong> <span style="background: #e8f5e8; padding: 2px 8px; border-radius: 4px;">${result.format}</span><br>
+                        <strong>🔢 データ:</strong> <code style="background: #f8f9fa; padding: 4px 8px; border-radius: 4px; font-size: 16px;">${result.text}</code><br>
+                        <strong>⭐ 品質:</strong> ${result.quality || 'N/A'}<br>
                     </div>
                 `;
             });
             displayResult(html, 'success');
         }
 
-        // カメラを開始
+        // カメラを開始（修正版）
         async function startCamera() {
+            const startTime = performance.now();
+            cameraStartTime = startTime;
+            updateStatus('scanning');
+            updateDebugInfo('カメラ起動中...', 0);
+            frameCount = 0;
+
             try {
+                displayResult('📹 カメラを開始しています...', 'info');
+
+                // ストリーム取得
                 stream = await navigator.mediaDevices.getUserMedia({
                     video: {
                         width: { ideal: 640 },
@@ -227,15 +377,41 @@
                         facingMode: { ideal: 'environment' }
                     }
                 });
+
+                // ビデオ要素にストリームを設定
                 video.srcObject = stream;
-                displayResult('カメラが開始されました', 'success');
+
+                // ビデオが再生開始するまで待機
+                await new Promise((resolve, reject) => {
+                    video.onloadedmetadata = () => {
+                        video.play().then(resolve).catch(reject);
+                    };
+                    video.onerror = reject;
+                });
+
+                // さらにビデオが実際に再生されるまで少し待機
+                await new Promise(resolve => setTimeout(resolve, 500));
+
+                const cameraTime = performance.now() - startTime;
+                updateTimingInfo(Math.round(cameraTime), undefined, undefined, undefined);
+
+                // リアルタイム白黒処理を開始
+                liveProcessInterval = setInterval(processToGrayscale, 33); // 約30fps
+
+                displayResult('✅ カメラが開始されました', 'success');
+                updateStatus('ready');
+                updateDebugInfo('動作中', frameCount);
+
                 startCameraBtn.disabled = true;
                 stopCameraBtn.disabled = false;
                 scanFromCameraBtn.disabled = false;
                 continuousModeBtn.disabled = false;
+
             } catch (error) {
-                displayResult('カメラの開始に失敗しました: ' + error.message, 'error');
+                displayResult('❌ カメラの開始に失敗しました: ' + error.message, 'error');
                 console.error('Camera error:', error);
+                updateStatus('error');
+                updateDebugInfo('エラー', frameCount);
             }
         }
 
@@ -246,8 +422,26 @@
                 stream = null;
                 video.srcObject = null;
             }
+
+            if (liveProcessInterval) {
+                clearInterval(liveProcessInterval);
+                liveProcessInterval = null;
+            }
+
             stopContinuousScanning();
-            displayResult('カメラが停止されました');
+
+            // キャンバスをクリア
+            liveCtx.fillStyle = '#000';
+            liveCtx.fillRect(0, 0, 640, 480);
+            liveCtx.fillStyle = '#fff';
+            liveCtx.font = '24px Arial';
+            liveCtx.textAlign = 'center';
+            liveCtx.fillText('カメラを開始してください', 320, 240);
+
+            displayResult('⏹ カメラが停止されました');
+            updateStatus('ready');
+            updateDebugInfo('停止中', frameCount);
+
             startCameraBtn.disabled = false;
             stopCameraBtn.disabled = true;
             scanFromCameraBtn.disabled = true;
@@ -257,43 +451,53 @@
         // カメラからバーコードをスキャン
         async function scanFromCamera() {
             if (!zxingModule) {
-                displayResult('ZXing-WASMが初期化されていません', 'error');
+                displayResult('❌ ZXing-WASMが初期化されていません', 'error');
                 return;
             }
 
-            if (!stream) {
-                displayResult('カメラが開始されていません', 'error');
+            if (!stream || video.readyState < 2) {
+                displayResult('❌ カメラが準備できていません', 'error');
                 return;
             }
 
             try {
-                const scanStartTime = performance.now();
+                const totalStartTime = performance.now();
+                scanStartTime = totalStartTime;
+                updateStatus('scanning');
 
-                // ビデオフレームをキャンバスに描画
-                ctx.drawImage(video, 0, 0, 640, 480);
+                displayResult('🔍 スキャン中...', 'info');
 
-                // 白黒フィルタ処理を実行
-                const { imageData, processTime } = processImageToGrayscale(canvas, processedCanvas, processedCtx);
+                // 現在のキャンバスから画像データを取得（既に白黒処理済み）
+                const imageData = liveCtx.getImageData(0, 0, 640, 480);
 
-                // バーコードスキャンオプション（白黒画像用に最適化）
+                // データが正しく取得できているかチェック
+                if (!imageData || imageData.data.length === 0) {
+                    throw new Error('画像データが取得できませんでした');
+                }
+
+                // バーコードスキャンオプション
                 const options = {
                     formats: ['QRCode', 'EAN-13', 'EAN-8', 'Code128', 'Code39', 'DataMatrix', 'PDF417'],
                     tryHarder: true,
-                    tryRotate: false, // 白黒化で高速化のため回転は無効
+                    tryRotate: false,
                     tryInvert: true,
-                    tryDownscale: false, // 既に480pに最適化済み
-                    binarizer: 'LocalAverage' // 白黒画像に適した二値化方式
+                    tryDownscale: false,
+                    binarizer: 'LocalAverage'
                 };
 
                 // バーコードを読み取り
+                const scanStart = performance.now();
                 const results = await ZXingWASM.readBarcodesFromImageData(imageData, options);
-                const scanTime = performance.now() - scanStartTime;
+                const scanTime = performance.now() - scanStart;
+                const totalTime = performance.now() - totalStartTime;
 
-                displayBarcodeResults(results, Math.round(scanTime), Math.round(processTime));
+                updateStatus('ready');
+                displayBarcodeResults(results, scanTime, totalTime);
 
             } catch (error) {
-                displayResult('スキャンエラー: ' + error.message, 'error');
+                displayResult('❌ スキャンエラー: ' + error.message, 'error');
                 console.error('Scan error:', error);
+                updateStatus('error');
             }
         }
 
@@ -301,9 +505,10 @@
         function startContinuousScanning() {
             if (!scanning) {
                 scanning = true;
-                scanInterval = setInterval(scanFromCamera, 500); // 0.5秒間隔で高速スキャン
-                continuousModeBtn.textContent = '連続スキャン停止';
-                displayResult('連続スキャンを開始しました (0.5秒間隔)', 'info');
+                scanInterval = setInterval(scanFromCamera, 1000);
+                continuousModeBtn.textContent = '⏸ 連続スキャン停止';
+                continuousModeBtn.className = 'btn-danger';
+                displayResult('🔄 連続スキャンを開始しました (1秒間隔)', 'info');
             }
         }
 
@@ -312,8 +517,9 @@
                 scanning = false;
                 clearInterval(scanInterval);
                 scanInterval = null;
-                continuousModeBtn.textContent = '連続スキャン開始';
-                displayResult('連続スキャンを停止しました', 'info');
+                continuousModeBtn.textContent = '🔄 連続スキャン開始';
+                continuousModeBtn.className = 'btn-warning';
+                displayResult('⏸ 連続スキャンを停止しました', 'info');
             }
         }
 
@@ -328,21 +534,20 @@
         // ファイルからバーコードをスキャン
         async function scanFromFile() {
             if (!zxingModule) {
-                displayResult('ZXing-WASMが初期化されていません', 'error');
+                displayResult('❌ ZXing-WASMが初期化されていません', 'error');
                 return;
             }
 
             const file = fileInput.files[0];
             if (!file) {
-                displayResult('ファイルを選択してください', 'error');
+                displayResult('❌ ファイルを選択してください', 'error');
                 return;
             }
 
             try {
-                displayResult('ファイルを処理中...', 'info');
-                const scanStartTime = performance.now();
+                displayResult('📁 ファイルを処理中...', 'info');
+                const totalStartTime = performance.now();
 
-                // バーコードスキャンオプション
                 const options = {
                     formats: ['QRCode', 'EAN-13', 'EAN-8', 'Code128', 'Code39', 'DataMatrix', 'PDF417'],
                     tryHarder: true,
@@ -351,14 +556,15 @@
                     binarizer: 'LocalAverage'
                 };
 
-                // ファイルからバーコードを読み取り
+                const scanStart = performance.now();
                 const results = await ZXingWASM.readBarcodesFromImageFile(file, options);
-                const scanTime = performance.now() - scanStartTime;
+                const scanTime = performance.now() - scanStart;
+                const totalTime = performance.now() - totalStartTime;
 
-                displayBarcodeResults(results, Math.round(scanTime), 0);
+                displayBarcodeResults(results, scanTime, totalTime);
 
             } catch (error) {
-                displayResult('ファイルスキャンエラー: ' + error.message, 'error');
+                displayResult('❌ ファイルスキャンエラー: ' + error.message, 'error');
                 console.error('File scan error:', error);
             }
         }
@@ -370,20 +576,6 @@
         continuousModeBtn.addEventListener('click', toggleContinuousScanning);
         scanFromFileBtn.addEventListener('click', scanFromFile);
 
-        // 初期化
-        window.addEventListener('load', () => {
-            initZXing();
-            // 初期状態でボタンを無効化
-            stopCameraBtn.disabled = true;
-            scanFromCameraBtn.disabled = true;
-            continuousModeBtn.disabled = true;
-        });
-
-        // ページを離れる時にリソースを解放
-        window.addEventListener('beforeunload', () => {
-            stopCamera();
-        });
-
         // キーボードショートカット
         document.addEventListener('keydown', (e) => {
             if (e.code === 'Space' && !e.repeat) {
@@ -392,6 +584,27 @@
                     scanFromCamera();
                 }
             }
+        });
+
+        // 初期化
+        window.addEventListener('load', () => {
+            initZXing();
+
+            // キャンバス初期表示
+            liveCtx.fillStyle = '#000';
+            liveCtx.fillRect(0, 0, 640, 480);
+            liveCtx.fillStyle = '#fff';
+            liveCtx.font = '24px Arial';
+            liveCtx.textAlign = 'center';
+            liveCtx.fillText('カメラを開始してください', 320, 240);
+
+            updateStatus('ready');
+            updateDebugInfo('待機中', 0);
+        });
+
+        // ページを離れる時にリソースを解放
+        window.addEventListener('beforeunload', () => {
+            stopCamera();
         });
     </script>
 </body>
