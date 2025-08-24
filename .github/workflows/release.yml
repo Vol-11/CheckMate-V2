@@ -53,10 +53,10 @@ jobs:
           echo "  Message: $commit_msg"
           echo "  Date: $commit_date"
 
-      - name: Get latest release tag (hex-aware)
+      - name: Get latest release tag (hex-aware with padding)
         id: get_latest_tag
         run: |
-          # 16進数対応のバージョンソート関数
+          # 16進数対応のバージョンソート関数（パディング対応）
           get_latest_hex_tag() {
             local latest_tag=""
             local latest_major=0
@@ -66,16 +66,21 @@ jobs:
             # デバッグ情報をstderrに出力
             echo "🔍 Analyzing version tags..." >&2
             
-            # 全てのタグを取得してループ
+            # 全てのタグを取得してループ（パディングあり・なし両対応）
             for tag in $(git tag -l 'v[0-9a-f]*.[0-9a-f]*.[0-9a-f]*'); do
               # vを除去
               version=${tag#v}
               IFS='.' read -r major minor patch <<< "$version"
               
-              # 16進数を10進数に変換
-              major_dec=$((16#$major))
-              minor_dec=$((16#$minor))
-              patch_dec=$((16#$patch))
+              # パディングを除去して16進数を10進数に変換
+              # 先頭の0を除去してから変換（00a -> a, 0a -> a, a -> a）
+              major_clean=$(echo "$major" | sed 's/^0*//' | sed 's/^$/0/')
+              minor_clean=$(echo "$minor" | sed 's/^0*//' | sed 's/^$/0/')
+              patch_clean=$(echo "$patch" | sed 's/^0*//' | sed 's/^$/0/')
+              
+              major_dec=$((16#$major_clean))
+              minor_dec=$((16#$minor_clean))
+              patch_dec=$((16#$patch_clean))
               
               echo "  Checking: $tag (hex: $major.$minor.$patch -> dec: $major_dec.$minor_dec.$patch_dec)" >&2
               
@@ -129,12 +134,12 @@ jobs:
             echo "- **${{ steps.commit_info.outputs.commit_msg }}** (\`${{ steps.commit_info.outputs.commit_short_hash }}\`) by ${{ steps.commit_info.outputs.commit_author }}" > push_commits.txt
           fi
 
-      - name: Extract version from commit message or increment by 1 (hex)
+      - name: Extract version from commit message or increment by 1 (hex with padding)
         id: get_version
         run: |
           commit_msg="${{ steps.commit_info.outputs.commit_msg }}"
           
-          # コミットメッセージの最初の行からvx.x.xを抽出（16進数対応）
+          # コミットメッセージの最初の行からvx.x.xを抽出（16進数対応、パディング対応）
           if echo "$commit_msg" | grep -qE '^v?[0-9a-f]+\.[0-9a-f]+\.[0-9a-f]+'; then
             # バージョンが見つかった場合
             version=$(echo "$commit_msg" | grep -oE '^v?[0-9a-f]+\.[0-9a-f]+\.[0-9a-f]+')
@@ -142,6 +147,23 @@ jobs:
             if [[ ! "$version" =~ ^v ]]; then
               version="v$version"
             fi
+            
+            # パディングを適用
+            version_no_v=${version#v}
+            IFS='.' read -r MA MI PA <<< "$version_no_v"
+            
+            # 各要素をクリーンアップしてから2桁にパディング
+            MA_clean=$(echo "$MA" | sed 's/^0*//' | sed 's/^$/0/')
+            MI_clean=$(echo "$MI" | sed 's/^0*//' | sed 's/^$/0/')
+            PA_clean=$(echo "$PA" | sed 's/^0*//' | sed 's/^$/0/')
+            
+            # 10進数に変換してから16進数でパディング
+            ma_dec=$((16#$MA_clean))
+            mi_dec=$((16#$MI_clean))
+            pa_dec=$((16#$PA_clean))
+            
+            version=$(printf "v%02x.%02x.%02x" $ma_dec $mi_dec $pa_dec)
+            
             echo "new_tag=$version" >> $GITHUB_OUTPUT
             echo "from_commit=true" >> $GITHUB_OUTPUT
             echo "✅ Found version in commit message: $version"
@@ -149,16 +171,20 @@ jobs:
             # バージョンが見つからなかった場合、既存タグから16進数で1つ繰り上げ
             prev="${{ steps.get_latest_tag.outputs.latest_tag }}"
             if [ -z "$prev" ]; then
-              new_tag="v0.0.1"
+              new_tag="v00.00.01"
             else
-              # vX.Y.Z を16進数として処理
+              # vX.Y.Z を16進数として処理（パディング除去）
               vers=${prev#v}
               IFS='.' read -r MA MI PA <<< "$vers"
               
-              # 16進数を10進数に変換
-              ma_dec=$((16#$MA))
-              mi_dec=$((16#$MI))
-              pa_dec=$((16#$PA))
+              # パディングを除去して16進数を10進数に変換
+              MA_clean=$(echo "$MA" | sed 's/^0*//' | sed 's/^$/0/')
+              MI_clean=$(echo "$MI" | sed 's/^0*//' | sed 's/^$/0/')
+              PA_clean=$(echo "$PA" | sed 's/^0*//' | sed 's/^$/0/')
+              
+              ma_dec=$((16#$MA_clean))
+              mi_dec=$((16#$MI_clean))
+              pa_dec=$((16#$PA_clean))
               
               echo "🔄 Previous version: $prev (hex: $MA.$MI.$PA -> dec: $ma_dec.$mi_dec.$pa_dec)"
               
@@ -176,8 +202,8 @@ jobs:
                 mi_dec=$((mi_dec % 16))
               fi
               
-              # 10進数を16進数に変換して出力
-              new_tag=$(printf "v%x.%x.%x" $ma_dec $mi_dec $pa_dec)
+              # 10進数を16進数に変換して2桁パディングで出力
+              new_tag=$(printf "v%02x.%02x.%02x" $ma_dec $mi_dec $pa_dec)
             fi
             echo "new_tag=$new_tag" >> $GITHUB_OUTPUT
             echo "from_commit=false" >> $GITHUB_OUTPUT
@@ -209,15 +235,20 @@ jobs:
           base_tag=${initial_tag#v}
           IFS='.' read -r MA MI PA <<< "$base_tag"
           
-          ma_dec=$((16#$MA))
-          mi_dec=$((16#$MI))
-          pa_dec=$((16#$PA))
+          # パディングを除去して10進数に変換
+          MA_clean=$(echo "$MA" | sed 's/^0*//' | sed 's/^$/0/')
+          MI_clean=$(echo "$MI" | sed 's/^0*//' | sed 's/^$/0/')
+          PA_clean=$(echo "$PA" | sed 's/^0*//' | sed 's/^$/0/')
+          
+          ma_dec=$((16#$MA_clean))
+          mi_dec=$((16#$MI_clean))
+          pa_dec=$((16#$PA_clean))
           
           max_attempts=50  # 最大50回まで試行
           attempts=0
           
           while [ $attempts -lt $max_attempts ]; do
-            current_tag=$(printf "v%x.%x.%x" $ma_dec $mi_dec $pa_dec)
+            current_tag=$(printf "v%02x.%02x.%02x" $ma_dec $mi_dec $pa_dec)
             
             echo "🔍 Checking tag: $current_tag"
             
@@ -280,7 +311,7 @@ jobs:
           if [ "${{ steps.get_version.outputs.from_commit }}" == "true" ]; then
             git tag -a "$new_tag" -m "Release $new_tag (from commit message)"
           else
-            git tag -a "$new_tag" -m "Release $new_tag (auto-incremented hex)"
+            git tag -a "$new_tag" -m "Release $new_tag (auto-incremented hex with padding)"
           fi
           
           echo "📤 Pushing tag: $new_tag"
@@ -367,7 +398,7 @@ jobs:
             
             echo ""
             echo "---"
-            echo "*Generated automatically by GitHub Actions*"
+            echo "*Generated automatically by GitHub Actions with hex versioning and 2-digit padding*"
             
           } > release_notes.md
           
