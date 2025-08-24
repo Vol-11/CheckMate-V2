@@ -561,15 +561,15 @@ const checkStatusMessage = document.getElementById('check-status');
 let animationFrameId;
 let checkAnimationFrameId;
 
-const codeReader = new ZXingBrowser.BrowserMultiFormatReader();
+const hints = new Map();
+hints.set(window.ZXing.DecodeHintType.POSSIBLE_FORMATS, [window.ZXing.BarcodeFormat.EAN_13]);
+hints.set(window.ZXing.DecodeHintType.TRY_HARDER, false);
+
+const codeReader = new ZXingBrowser.BrowserMultiFormatReader(hints);
 let selectedDeviceId = undefined;
 let checkSelectedDeviceId = undefined;
 let scanControls = null;
 let checkScanControls = null;
-
-const hints = new Map();
-hints.set(window.ZXing.DecodeHintType.POSSIBLE_FORMATS, [window.ZXing.BarcodeFormat.EAN_13]);
-hints.set(window.ZXing.DecodeHintType.TRY_HARDER, false);
 ZXingBrowser.BrowserMultiFormatReader.listVideoInputDevices(hints)
   .then((videoInputDevices) => {
     if (videoInputDevices.length > 0) {
