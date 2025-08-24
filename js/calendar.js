@@ -428,7 +428,7 @@ function calendarScanLoop() {
         try {
             const result = codeReader.decodeFromCanvas(canvas);
             if (result) {
-                onDetected(result);
+                onCalendarDetected(result);
             }
         } catch (err) {
             // エラーメッセージで判定する方法に変更
