@@ -616,6 +616,11 @@ function onCheckDetected(result) {
   const code = result.getText();
   if (!code) return;
 
+  // currentDayが設定されていない場合は設定する
+  if (!currentDay && checklistDate) {
+    currentDay = ['日', '月', '火', '水', '木', '金', '土'][checklistDate.getDay()];
+  }
+
   const dayItems = items.filter(i => i.days.includes(currentDay));
   const foundItem = dayItems.find(i => i.code === code);
 

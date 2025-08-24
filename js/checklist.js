@@ -1,10 +1,27 @@
 let checklistDate = new Date(); // 現在のチェックリストの日付
 
+// 日付から曜日を取得する関数を追加
+function getDayOfWeek(date) {
+    const days = ['日', '月', '火', '水', '木', '金', '土'];
+    return days[date.getDay()];
+}
+
+// currentDayを更新する関数を追加（グローバルのcurrentDayを使用）
+function updateCurrentDay() {
+    // グローバルのcurrentDay変数を更新
+    if (typeof window !== 'undefined') {
+        window.currentDay = getDayOfWeek(checklistDate);
+    }
+}
+
 // チェック状況表示の統一化
 async function updateCheckDisplay() {
     if (!checklistDate) return;
-    const forgottenStats = await getForgottenItemStats();
 
+    // currentDayを更新
+    updateCurrentDay();
+
+    const forgottenStats = await getForgottenItemStats();
     const allItemsForDate = await getItemsForDate(checklistDate);
 
     renderChecklist(allItemsForDate, forgottenStats);
@@ -120,12 +137,14 @@ function initializeChecklist() {
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
     checklistDate = tomorrow;
+    updateCurrentDay(); // currentDayを初期化
     datePicker.value = toDateString(tomorrow);
 
     // 日付ピッカーのイベントリスナー
     datePicker.addEventListener('change', () => {
         const [year, month, day] = datePicker.value.split('-').map(Number);
         checklistDate = new Date(year, month - 1, day);
+        updateCurrentDay(); // currentDayを更新
         updateCheckDisplay();
     });
 
@@ -141,8 +160,8 @@ function initializeChecklist() {
             if (itemIndex > -1) {
                 override.added[itemIndex].checked = isChecked;
                 await saveOverride(override);
-                await updateCheckDisplay(); // リストを再描画
-                await updateStats(); // ヘッダーの統計を更新
+                await updateCheckDisplay();
+                await updateStats();
             }
         }
     };
