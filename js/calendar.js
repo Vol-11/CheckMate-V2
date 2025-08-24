@@ -433,11 +433,15 @@ function stopCalendarScanning() {
 // イベントリスナー（安全な登録）
 if (calendarScanBtn) {
     calendarScanBtn.addEventListener('click', startCalendarScanning);
-}else(alert("calendarScanBtn is null"));
+}else {
+    console.warn('calendarScanBtn element not found');
+}
 
 if (calendarStopBtn) {
     calendarStopBtn.addEventListener('click', stopCalendarScanning);
-}else(alert("calendarStopBtn is null"));
+} else {
+    console.warn('calendarStopBtn element not found');
+}
 
 // クリーンアップ
 window.addEventListener('beforeunload', () => {
