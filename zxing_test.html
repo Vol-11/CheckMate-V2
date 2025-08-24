@@ -53,7 +53,7 @@
     /* Tailwind ボタンユーティリティ */
     .tw-btn-primary { @apply px-3 py-2 rounded text-white bg-blue-600 hover:bg-blue-700 disabled:bg-gray-500 transition; }
     .tw-btn-secondary { @apply px-3 py-2 rounded text-gray-700 dark:text-gray-200 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 disabled:bg-gray-500 transition; }
-    .tw-btn-success { @apply px-3 py-2 rounded text-white bg-green-600 hover:green-700 disabled:bg-gray-500 transition; }
+    .tw-btn-success { @apply px-3 py-2 rounded text-white bg-green-600 hover:bg-green-700 disabled:bg-gray-500 transition; }
   </style>
   <script>
     // Utility
@@ -106,7 +106,7 @@
         const timeout = setTimeout(() => reject(new Error('Video準備タイムアウト')), 10000);
         
         const checkReady = () => {
-          if (video.readyState >= 2) {
+          if (video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0) {
             clearTimeout(timeout);
             resolve();
           } else {
@@ -115,14 +115,17 @@
         };
         
         video.addEventListener('loadedmetadata', () => {
-          clearTimeout(timeout);
-          resolve();
+          // メタデータ読み込み後も実際の映像サイズを確認
+          setTimeout(checkReady, 100);
         }, { once: true });
         
         checkReady();
       });
       
       await safePlayVideo(video);
+      
+      // 映像が安定するまで追加で待機
+      await new Promise(r => setTimeout(r, 300));
     }
 
     // アダプター：ZXing専用（修正版）
@@ -143,33 +146,90 @@
         hints.set(window.ZXing.DecodeHintType.POSSIBLE_FORMATS, [window.ZXing.BarcodeFormat.EAN_13]);
         hints.set(window.ZXing.DecodeHintType.TRY_HARDER, false);
         
-        // リーダー作成前に少し待機
-        await new Promise(r => setTimeout(r, 100));
+        // リーダー作成
         this.reader = new window.ZXing.BrowserMultiFormatReader(hints);
+        
+        // ★ 重要：リーダーの準備完了を確認
+        await this.ensureReaderReady();
         
         t1 = performance.now();
         log(`✅ ZXing初期化完了 (${(t1-t0).toFixed(1)}ms) - EAN-13特化モード`);
       },
+      
+      // ★ 新しく追加：リーダー準備完了確認メソッド
+      async ensureReaderReady() {
+        let attempts = 0;
+        const maxAttempts = 10;
+        
+        while (attempts < maxAttempts) {
+          try {
+            // ビデオストリームの状態確認
+            if (video.videoWidth > 0 && video.videoHeight > 0) {
+              // 短時間のテストスキャンを実行
+              await new Promise(resolve => {
+                const testTimeout = setTimeout(() => {
+                  this.reader.reset();
+                  resolve();
+                }, 200);
+                
+                this.reader.decodeFromVideoElementContinuously(video, (result, error) => {
+                  clearTimeout(testTimeout);
+                  this.reader.reset();
+                  resolve();
+                });
+              });
+              
+              log('📋 ZXingリーダー準備完了を確認');
+              return;
+            }
+          } catch (error) {
+            log(`⚠️ リーダー準備確認中 (${attempts + 1}/${maxAttempts}):`, error.message);
+          }
+          
+          attempts++;
+          await new Promise(r => setTimeout(r, 300));
+        }
+        
+        throw new Error('ZXingリーダーの準備が完了しませんでした');
+      },
+      
       async startScan(onDetected) {
         if (this.scanning || !this.reader) return;
+        
+        // ★ スキャン開始前の状態確認
+        if (!video.videoWidth || !video.videoHeight) {
+          throw new Error('ビデオストリームが準備できていません');
+        }
+        
         this.scanning = true;
         s0 = performance.now();
-        this.reader.decodeFromVideoElementContinuously(video, (result, err) => {
-          if (result && this.scanning) {
-            s1 = performance.now();
-            const text = result.getText();
-            const format = result.getBarcodeFormat();
-            const isISBN = /^97[89]\d{10}$/.test(text);
-            log(`🎯 検出: ${text} ${isISBN ? '📚(ISBN)' : '📦(一般EAN)'}`);
-            onDetected({ text, format, isISBN });
-            this.stopScan();
-          }
-        });
+        
+        // ★ より確実なスキャン開始
+        try {
+          this.reader.decodeFromVideoElementContinuously(video, (result, err) => {
+            if (result && this.scanning) {
+              s1 = performance.now();
+              const text = result.getText();
+              const format = result.getBarcodeFormat();
+              const isISBN = /^97[89]\d{10}$/.test(text);
+              log(`🎯 検出: ${text} ${isISBN ? '📚(ISBN)' : '📦(一般EAN)'}`);
+              onDetected({ text, format, isISBN });
+              this.stopScan();
+            }
+          });
+          
+          log('🔍 スキャン開始 - リーダーが正常に動作中');
+        } catch (error) {
+          this.scanning = false;
+          throw new Error(`スキャン開始に失敗: ${error.message}`);
+        }
       },
+      
       async stopScan() {
         this.reader && this.reader.reset();
         this.scanning = false;
       },
+      
       async cleanup() {
         await this.stopScan();
         this.reader = null;
