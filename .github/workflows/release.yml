@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:  # 手動実行用
 
 permissions:
   contents: write
@@ -18,6 +19,71 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Rename old format tags (hex migration)
+        id: rename_old_tags
+        run: |
+          echo "🔍 Checking for old format tags that need renaming..."
+          
+          # Git設定
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          
+          # 古いタグ形式の正規表現（1桁の16進数）
+          renamed_count=0
+          
+          # 全タグを取得してループ
+          for tag in $(git tag -l 'v[0-9a-f].[0-9a-f].[0-9a-f]'); do
+            if [[ $tag =~ ^v[0-9a-f]\.[0-9a-f]\.[0-9a-f]$ ]]; then
+              # 古い形式だった場合、新形式に変換
+              version=${tag#v}
+              IFS='.' read -r MA MI PA <<< "$version"
+              
+              # 16進数を10進数に変換してから2桁16進数でパディング
+              ma_dec=$((16#$MA))
+              mi_dec=$((16#$MI))
+              pa_dec=$((16#$PA))
+              new_tag=$(printf "v%02x.%02x.%02x" $ma_dec $mi_dec $pa_dec)
+              
+              echo "⚠️ Found old format tag: $tag -> should be $new_tag"
+              
+              # 新タグが存在するかチェック
+              if git rev-parse -q --verify "refs/tags/$new_tag" >/dev/null 2>&1; then
+                echo "❌ New tag $new_tag already exists, skipping rename of $tag"
+              else
+                # タグが指すコミットハッシュを取得
+                commit_hash=$(git rev-list -n 1 $tag)
+                
+                # 古いタグがアノテーション付きかチェック
+                if git cat-file -t $tag | grep -q "tag"; then
+                  # アノテーション付きタグの場合、元の情報を保持
+                  original_message=$(git tag -l --format='%(contents)' $tag)
+                  git tag -a "$new_tag" -m "$original_message" $commit_hash
+                else
+                  # 軽量タグの場合
+                  git tag "$new_tag" $commit_hash
+                fi
+                
+                # 古いタグをローカルで削除
+                git tag -d $tag
+                
+                # リモートの古いタグを削除して新しいタグをプッシュ
+                git push origin :refs/tags/$tag || echo "Old tag $tag was not on remote"
+                git push origin $new_tag
+                
+                echo "✅ Successfully renamed $tag -> $new_tag"
+                renamed_count=$((renamed_count + 1))
+              fi
+            fi
+          done
+          
+          echo "renamed_count=$renamed_count" >> $GITHUB_OUTPUT
+          
+          if [ $renamed_count -gt 0 ]; then
+            echo "🔄 Renamed $renamed_count old format tags"
+          else
+            echo "✅ No old format tags found"
+          fi
 
       - name: Get commit information
         id: commit_info
@@ -138,6 +204,16 @@ jobs:
         id: get_version
         run: |
           commit_msg="${{ steps.commit_info.outputs.commit_msg }}"
+          renamed_count="${{ steps.rename_old_tags.outputs.renamed_count }}"
+          
+          # 古いタグをリネームした場合は、新リリースをスキップ
+          if [ "$renamed_count" -gt "0" ]; then
+            echo "⚠️ Old tags were renamed ($renamed_count tags). Skipping new release creation to avoid conflicts."
+            echo "skip_new_release=true" >> $GITHUB_OUTPUT
+            exit 0
+          else
+            echo "skip_new_release=false" >> $GITHUB_OUTPUT
+          fi
           
           # コミットメッセージの最初の行からvx.x.xを抽出（16進数対応、パディング対応）
           if echo "$commit_msg" | grep -qE '^v?[0-9a-f]+\.[0-9a-f]+\.[0-9a-f]+'; then
@@ -213,10 +289,15 @@ jobs:
       - name: Check if no new commits  
         id: check_commits
         run: |
+          skip_new_release="${{ steps.get_version.outputs.skip_new_release }}"
           latest_tag="${{ steps.get_latest_tag.outputs.latest_tag }}"
           push_commits_count="${{ steps.push_commits.outputs.push_commits_count }}"
+          renamed_count="${{ steps.rename_old_tags.outputs.renamed_count }}"
           
-          if [ -n "$latest_tag" ] && [ "$push_commits_count" -eq "0" ]; then
+          if [ "$skip_new_release" == "true" ]; then
+            echo "⚠️ Skipping release creation due to tag renaming ($renamed_count tags renamed)."
+            echo "skip_release=true" >> $GITHUB_OUTPUT
+          elif [ -n "$latest_tag" ] && [ "$push_commits_count" -eq "0" ]; then
             echo "⚠️ No new commits since $latest_tag. Skipping release."
             echo "skip_release=true" >> $GITHUB_OUTPUT
           else
@@ -341,6 +422,7 @@ jobs:
           has_push_commits="${{ steps.push_commits.outputs.has_push_commits }}"
           latest_tag="${{ steps.get_latest_tag.outputs.latest_tag }}"
           has_body="${{ steps.commit_info.outputs.has_body }}"
+          renamed_count="${{ steps.rename_old_tags.outputs.renamed_count }}"
           
           # リリースノートをファイルに直接書き込み
           {
@@ -348,6 +430,10 @@ jobs:
             echo ""
             echo "**Version**: $tag"
             echo "**Release Date**: $(date '+%Y-%m-%d %H:%M:%S JST')"
+            
+            if [ "$renamed_count" -gt "0" ]; then
+              echo "**Previous run**: Renamed $renamed_count old format tags to new format"
+            fi
             
             if [ "$has_push_commits" == "true" ]; then
               echo "**Commits in this push**: $push_commits_count commits"
