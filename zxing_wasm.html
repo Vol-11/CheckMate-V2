@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ZXing-WASM 高速バーコードスキャナー (修正版)</title>
+    <title>ZXing-WASM 高速バーコードスキャナー (460p最適化版)</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -131,20 +131,35 @@
             margin: 10px 0;
             font-size: 14px;
         }
+        .resolution-info {
+            background: #d1ecf1;
+            border: 1px solid #bee5eb;
+            border-radius: 6px;
+            padding: 10px;
+            margin: 10px 0;
+            color: #0c5460;
+            font-weight: bold;
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>ZXing-WASM 高速バーコードスキャナー</h1>
+        <h1>ZXing-WASM 高速バーコードスキャナー (460p)</h1>
+
+        <!-- 解像度情報 -->
+        <div class="resolution-info">
+            🚀 460x460解像度で最適化 - 高速処理対応
+        </div>
 
         <!-- リアルタイム白黒映像表示 -->
         <div>
-            <h2><span id="statusIndicator" class="status-indicator"></span>リアルタイム白黒映像</h2>
-            <canvas id="liveCanvas" width="640" height="480"></canvas>
+            <h2><span id="statusIndicator" class="status-indicator"></span>リアルタイム白黒映像 (460p)</h2>
+            <canvas id="liveCanvas" width="460" height="460"></canvas>
             <!-- デバッグ情報 -->
             <div id="debugInfo" class="debug-info">
                 映像状態: <span id="videoStatus">待機中</span> |
-                フレーム更新: <span id="frameCount">0</span>
+                フレーム更新: <span id="frameCount">0</span> |
+                解像度: <span id="resolution">460x460</span>
             </div>
 
             <div class="controls">
@@ -164,7 +179,7 @@
 
         <!-- タイミング情報 -->
         <div class="timing-info">
-            <h3>⏱ パフォーマンス測定</h3>
+            <h3>⏱ パフォーマンス測定 (460p最適化)</h3>
             <div class="timing-grid">
                 <div class="timing-item">
                     <strong>カメラ起動時間:</strong><br>
@@ -181,6 +196,14 @@
                 <div class="timing-item">
                     <strong>総認識時間:</strong><br>
                     <span id="totalTime">未測定</span>
+                </div>
+                <div class="timing-item">
+                    <strong>処理ピクセル数:</strong><br>
+                    <span id="pixelCount">211,600 px</span>
+                </div>
+                <div class="timing-item">
+                    <strong>フレームレート:</strong><br>
+                    <span id="framerate">計算中...</span>
                 </div>
             </div>
         </div>
@@ -203,11 +226,18 @@
         let scanInterval = null;
         let liveProcessInterval = null;
         let frameCount = 0;
+        let lastFrameTime = 0;
+        let frameRateHistory = [];
+
+        // 460p解像度設定
+        const CANVAS_WIDTH = 460;
+        const CANVAS_HEIGHT = 460;
+        const TOTAL_PIXELS = CANVAS_WIDTH * CANVAS_HEIGHT;
 
         // 隠されたビデオ要素（プログラムで作成）
         const video = document.createElement('video');
-        video.width = 640;
-        video.height = 480;
+        video.width = CANVAS_WIDTH;
+        video.height = CANVAS_HEIGHT;
         video.autoplay = true;
         video.muted = true;
         video.playsInline = true;
@@ -232,6 +262,9 @@
         // デバッグ表示要素
         const videoStatusEl = document.getElementById('videoStatus');
         const frameCountEl = document.getElementById('frameCount');
+        const resolutionEl = document.getElementById('resolution');
+        const pixelCountEl = document.getElementById('pixelCount');
+        const framerateEl = document.getElementById('framerate');
 
         // タイミング表示要素
         const cameraStartTimeEl = document.getElementById('cameraStartTime');
@@ -248,6 +281,27 @@
         function updateDebugInfo(videoStatus, frameCount) {
             videoStatusEl.textContent = videoStatus;
             frameCountEl.textContent = frameCount;
+            resolutionEl.textContent = `${CANVAS_WIDTH}x${CANVAS_HEIGHT}`;
+            pixelCountEl.textContent = `${TOTAL_PIXELS.toLocaleString()} px`;
+        }
+
+        // フレームレート計算
+        function calculateFrameRate() {
+            const now = performance.now();
+            if (lastFrameTime > 0) {
+                const frameDuration = now - lastFrameTime;
+                const fps = 1000 / frameDuration;
+                frameRateHistory.push(fps);
+
+                // 最新10フレームの平均を計算
+                if (frameRateHistory.length > 10) {
+                    frameRateHistory.shift();
+                }
+
+                const avgFps = frameRateHistory.reduce((a, b) => a + b, 0) / frameRateHistory.length;
+                framerateEl.textContent = `${Math.round(avgFps)} fps`;
+            }
+            lastFrameTime = now;
         }
 
         // ZXing-WASM モジュールの初期化
@@ -255,7 +309,7 @@
             try {
                 zxingModule = await ZXingWASM.getZXingModule();
                 console.log('ZXing-WASM initialized successfully');
-                displayResult('✅ ZXing-WASMが正常に初期化されました', 'success');
+                displayResult('✅ ZXing-WASMが正常に初期化されました (460p最適化)', 'success');
                 updateStatus('ready');
             } catch (error) {
                 console.error('Failed to initialize ZXing-WASM:', error);
@@ -285,7 +339,7 @@
             }
         }
 
-        // 白黒フィルタ処理（修正版：video要素から直接処理）
+        // 460p白黒フィルタ処理（高速最適化版）
         function processToGrayscale() {
             if (!stream || video.readyState < 2) {
                 updateDebugInfo('待機中...', frameCount);
@@ -295,14 +349,14 @@
             const processStart = performance.now();
 
             try {
-                // ビデオから直接キャンバスに描画
-                liveCtx.drawImage(video, 0, 0, 640, 480);
+                // ビデオから460x460キャンバスに描画（自動スケーリング）
+                liveCtx.drawImage(video, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
                 // 画像データ取得と白黒変換
-                const imageData = liveCtx.getImageData(0, 0, 640, 480);
+                const imageData = liveCtx.getImageData(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
                 const data = imageData.data;
 
-                // 高速白黒変換
+                // 高速白黒変換（460p用に最適化）
                 for (let i = 0; i < data.length; i += 4) {
                     const gray = Math.round(
                         0.299 * data[i] +     // R
@@ -320,6 +374,8 @@
                 liveCtx.putImageData(imageData, 0, 0);
 
                 frameCount++;
+                calculateFrameRate();
+
                 const processTime = performance.now() - processStart;
                 updateTimingInfo(undefined, Math.round(processTime), undefined, undefined);
                 updateDebugInfo('描画中', frameCount);
@@ -339,7 +395,7 @@
                 return;
             }
 
-            let html = '<h4>🎉 検出されたバーコード:</h4>';
+            let html = '<h4>🎉 検出されたバーコード (460p解像度):</h4>';
             results.forEach((result, index) => {
                 let icon = '📄';
                 if (result.format.includes('QR')) icon = '🔳';
@@ -352,28 +408,30 @@
                         <strong>📌 フォーマット:</strong> <span style="background: #e8f5e8; padding: 2px 8px; border-radius: 4px;">${result.format}</span><br>
                         <strong>🔢 データ:</strong> <code style="background: #f8f9fa; padding: 4px 8px; border-radius: 4px; font-size: 16px;">${result.text}</code><br>
                         <strong>⭐ 品質:</strong> ${result.quality || 'N/A'}<br>
+                        <small>解像度: ${CANVAS_WIDTH}x${CANVAS_HEIGHT} (${TOTAL_PIXELS.toLocaleString()}px)</small>
                     </div>
                 `;
             });
             displayResult(html, 'success');
         }
 
-        // カメラを開始（修正版）
+        // カメラを開始（460p最適化版）
         async function startCamera() {
             const startTime = performance.now();
             cameraStartTime = startTime;
             updateStatus('scanning');
             updateDebugInfo('カメラ起動中...', 0);
             frameCount = 0;
+            frameRateHistory = [];
 
             try {
-                displayResult('📹 カメラを開始しています...', 'info');
+                displayResult('📹 カメラを開始しています... (460p解像度)', 'info');
 
-                // ストリーム取得
+                // ストリーム取得（460p用に最適化）
                 stream = await navigator.mediaDevices.getUserMedia({
                     video: {
-                        width: { ideal: 640 },
-                        height: { ideal: 480 },
+                        width: { ideal: CANVAS_WIDTH },
+                        height: { ideal: CANVAS_HEIGHT },
                         facingMode: { ideal: 'environment' }
                     }
                 });
@@ -390,15 +448,15 @@
                 });
 
                 // さらにビデオが実際に再生されるまで少し待機
-                await new Promise(resolve => setTimeout(resolve, 500));
+                await new Promise(resolve => setTimeout(resolve, 300));
 
                 const cameraTime = performance.now() - startTime;
                 updateTimingInfo(Math.round(cameraTime), undefined, undefined, undefined);
 
-                // リアルタイム白黒処理を開始
-                liveProcessInterval = setInterval(processToGrayscale, 33); // 約30fps
+                // リアルタイム白黒処理を開始（460pで高速化）
+                liveProcessInterval = setInterval(processToGrayscale, 25); // 約40fps
 
-                displayResult('✅ カメラが開始されました', 'success');
+                displayResult('✅ カメラが開始されました (460p解像度)', 'success');
                 updateStatus('ready');
                 updateDebugInfo('動作中', frameCount);
 
@@ -432,23 +490,20 @@
 
             // キャンバスをクリア
             liveCtx.fillStyle = '#000';
-            liveCtx.fillRect(0, 0, 640, 480);
+            liveCtx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
             liveCtx.fillStyle = '#fff';
             liveCtx.font = '24px Arial';
             liveCtx.textAlign = 'center';
-            liveCtx.fillText('カメラを開始してください', 320, 240);
+            liveCtx.fillText('カメラを開始してください', CANVAS_WIDTH/2, CANVAS_HEIGHT/2);
+            liveCtx.fillText('(460p解像度)', CANVAS_WIDTH/2, CANVAS_HEIGHT/2 + 30);
 
             displayResult('⏹ カメラが停止されました');
             updateStatus('ready');
             updateDebugInfo('停止中', frameCount);
-
-            startCameraBtn.disabled = false;
-            stopCameraBtn.disabled = true;
-            scanFromCameraBtn.disabled = true;
-            continuousModeBtn.disabled = true;
+            framerateEl.textContent = '0 fps';
         }
 
-        // カメラからバーコードをスキャン
+        // カメラからバーコードをスキャン（460p対応）
         async function scanFromCamera() {
             if (!zxingModule) {
                 displayResult('❌ ZXing-WASMが初期化されていません', 'error');
@@ -465,23 +520,23 @@
                 scanStartTime = totalStartTime;
                 updateStatus('scanning');
 
-                displayResult('🔍 スキャン中...', 'info');
+                displayResult('🔍 スキャン中... (460p解像度)', 'info');
 
                 // 現在のキャンバスから画像データを取得（既に白黒処理済み）
-                const imageData = liveCtx.getImageData(0, 0, 640, 480);
+                const imageData = liveCtx.getImageData(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
                 // データが正しく取得できているかチェック
                 if (!imageData || imageData.data.length === 0) {
                     throw new Error('画像データが取得できませんでした');
                 }
 
-                // バーコードスキャンオプション
+                // バーコードスキャンオプション（460p用に最適化）
                 const options = {
                     formats: ['QRCode', 'EAN-13', 'EAN-8', 'Code128', 'Code39', 'DataMatrix', 'PDF417'],
                     tryHarder: true,
-                    tryRotate: false,
+                    tryRotate: false, // 460pで高速化のため無効
                     tryInvert: true,
-                    tryDownscale: false,
+                    tryDownscale: false, // 既に460pで最適化済み
                     binarizer: 'LocalAverage'
                 };
 
@@ -501,14 +556,14 @@
             }
         }
 
-        // 連続スキャン機能
+        // 連続スキャン機能（460p高速化）
         function startContinuousScanning() {
             if (!scanning) {
                 scanning = true;
-                scanInterval = setInterval(scanFromCamera, 1000);
+                scanInterval = setInterval(scanFromCamera, 800); // 460pで高速化のため0.8秒間隔
                 continuousModeBtn.textContent = '⏸ 連続スキャン停止';
                 continuousModeBtn.className = 'btn-danger';
-                displayResult('🔄 連続スキャンを開始しました (1秒間隔)', 'info');
+                displayResult('🔄 連続スキャンを開始しました (0.8秒間隔, 460p最適化)', 'info');
             }
         }
 
@@ -545,7 +600,7 @@
             }
 
             try {
-                displayResult('📁 ファイルを処理中...', 'info');
+                displayResult('📁 ファイルを処理中... (460p解像度対応)', 'info');
                 const totalStartTime = performance.now();
 
                 const options = {
@@ -592,11 +647,12 @@
 
             // キャンバス初期表示
             liveCtx.fillStyle = '#000';
-            liveCtx.fillRect(0, 0, 640, 480);
+            liveCtx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
             liveCtx.fillStyle = '#fff';
             liveCtx.font = '24px Arial';
             liveCtx.textAlign = 'center';
-            liveCtx.fillText('カメラを開始してください', 320, 240);
+            liveCtx.fillText('カメラを開始してください', CANVAS_WIDTH/2, CANVAS_HEIGHT/2);
+            liveCtx.fillText('(460p解像度)', CANVAS_WIDTH/2, CANVAS_HEIGHT/2 + 30);
 
             updateStatus('ready');
             updateDebugInfo('待機中', 0);
