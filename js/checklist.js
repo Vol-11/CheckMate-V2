@@ -6,20 +6,19 @@ function getDayOfWeek(date) {
     return days[date.getDay()];
 }
 
-// currentDayを更新する関数を追加（グローバルのcurrentDayを使用）
+// グローバルアクセス用にwindowオブジェクトに登録
 function updateCurrentDay() {
-    // グローバルのcurrentDay変数を更新
-    if (typeof window !== 'undefined') {
-        window.currentDay = getDayOfWeek(checklistDate);
-    }
+    const days = ['日', '月', '火', '水', '木', '金', '土'];
+    window.currentDay = days[checklistDate.getDay()];
+    window.checklistDate = checklistDate; // こちらも必要に応じて
 }
 
+// チェック状況表示の統一化
 // チェック状況表示の統一化
 async function updateCheckDisplay() {
     if (!checklistDate) return;
 
-    // currentDayを更新
-    updateCurrentDay();
+    updateCurrentDay(); // グローバル変数を更新
 
     const forgottenStats = await getForgottenItemStats();
     const allItemsForDate = await getItemsForDate(checklistDate);
