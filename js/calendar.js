@@ -426,17 +426,16 @@ function calendarScanLoop() {
         ctx.putImageData(imageData, 0, 0);
 
         try {
-            const result = codeReader.decodeFromCanvas(canvas);
+            // 修正：calendarCanvas と onCalendarDetected を使用
+            const result = window.codeReader.decodeFromCanvas(calendarCanvas);
             if (result) {
-                alert("Detected: " + result.getText());
                 onCalendarDetected(result);
             }
         } catch (err) {
-            // エラーメッセージで判定する方法に変更
             if (!(err instanceof ZXing.NotFoundException) &&
                 !err.message?.includes('No MultiFormat Readers were able to detect the code') &&
                 !err.message?.includes('NotFoundException')) {
-                console.error('Scan error:', err);
+                console.error('Calendar scan error:', err);
             }
             // バーコードが見つからないエラーは無視（正常動作）
         }
