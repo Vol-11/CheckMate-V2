@@ -187,5 +187,218 @@ function initializeCalendar() {
         }
     });
 }
+// カレンダー用バーコードスキャン機能
+let isCalendarScanning = false;
+let calendarAnimationFrameId;
+let calendarSelectedDeviceId = undefined;
+
+// DOM要素
+const calendarScanBtn = document.getElementById('calendar-scan-btn');
+const calendarStopBtn = document.getElementById('calendar-stop-btn');
+const calendarVideo = document.getElementById('calendar-video');
+const calendarCanvas = document.getElementById('calendar-canvas');
+const calendarStatusMessage = document.getElementById('calendar-status');
+const specialItemBarcodeInput = document.getElementById('special-item-barcode');
+const addSpecialBarcodeBtn = document.getElementById('add-special-barcode-btn');
+
+// スキャンモード切り替え
+document.querySelectorAll('.calendar-scan-mode-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        const mode = btn.dataset.mode;
+
+        // ボタンの状態更新
+        document.querySelectorAll('.calendar-scan-mode-btn').forEach(b => {
+            b.className = 'calendar-scan-mode-btn flex-1 py-2 px-3 text-sm font-medium transition-all duration-200 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600';
+        });
+        btn.className = 'calendar-scan-mode-btn flex-1 py-2 px-3 text-sm font-medium transition-all duration-200 bg-blue-600 text-white';
+
+        // モード表示切り替え
+        if (mode === 'manual') {
+            document.getElementById('calendar-manual-mode').classList.remove('hidden');
+            document.getElementById('calendar-scan-mode').classList.add('hidden');
+            stopCalendarScanning();
+        } else {
+            document.getElementById('calendar-manual-mode').classList.add('hidden');
+            document.getElementById('calendar-scan-mode').classList.remove('hidden');
+        }
+    });
+});
+
+// 手動バーコード入力
+addSpecialBarcodeBtn.addEventListener('click', async () => {
+    const barcode = specialItemBarcodeInput.value.trim();
+    if (!barcode || !selectedDate) return;
+
+    await addSpecialItemWithBarcode(barcode);
+    specialItemBarcodeInput.value = '';
+});
+
+// Enterキーでも登録可能に
+specialItemBarcodeInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') {
+        addSpecialBarcodeBtn.click();
+    }
+});
+
+// バーコード付き特別アイテムの追加
+async function addSpecialItemWithBarcode(barcode) {
+    if (!selectedDate) {
+        showStatus('日付を選択してください', 'warning');
+        return;
+    }
+
+    // 既存アイテムに同じバーコードがあるかチェック
+    const existingItem = items.find(i => i.code === barcode);
+    let itemName;
+
+    if (existingItem) {
+        itemName = existingItem.name;
+        showStatus(`✅ 既存アイテム「${itemName}」をこの日に追加しました`, 'success');
+    } else {
+        // 新しいアイテム名を入力してもらう
+        itemName = prompt(`バーコード: ${barcode}\n\nアイテム名を入力してください:`);
+        if (!itemName || !itemName.trim()) {
+            showStatus('アイテム名が入力されませんでした', 'warning');
+            return;
+        }
+        itemName = itemName.trim();
+    }
+
+    const override = await getOverride(selectedDate) || { date: selectedDate, added: [], removed: [] };
+
+    // 既に同じバーコードが追加されているかチェック
+    const alreadyAdded = override.added.find(item => item.code === barcode);
+    if (alreadyAdded) {
+        showStatus('このバーコードは既に追加されています', 'warning');
+        return;
+    }
+
+    override.added.push({
+        id: Date.now(),
+        name: itemName,
+        code: barcode,
+        checked: false
+    });
+
+    await saveOverride(override);
+    await renderDateSpecificChecklist(selectedDate);
+    await updateStats();
+
+    showStatus(`✅ 「${itemName}」を${selectedDate}に追加しました`, 'success');
+}
+
+// カレンダー用スキャン検出
+function onCalendarDetected(result) {
+    const code = result.getText();
+    if (!code) return;
+
+    calendarStatusMessage.textContent = `📖 検出: ${code}`;
+    calendarStatusMessage.className = 'p-2 rounded-lg mb-3 text-center text-sm font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 border border-green-300 dark:border-green-700';
+
+    if (navigator.vibrate) navigator.vibrate([100, 50, 100, 50, 100]);
+
+    stopCalendarScanning();
+    addSpecialItemWithBarcode(code);
+
+    setTimeout(() => {
+        calendarStatusMessage.textContent = '📷 バーコードをスキャンして登録';
+        calendarStatusMessage.className = 'p-2 rounded-lg mb-3 text-center text-sm font-medium bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-700';
+    }, 3000);
+}
+
+// カレンダー用スキャン開始
+async function startCalendarScanning() {
+    if (isCalendarScanning) return;
+    isCalendarScanning = true;
+    calendarScanBtn.disabled = true;
+    calendarStopBtn.disabled = false;
+    calendarStatusMessage.textContent = '🎥 カメラを起動中...';
+
+    try {
+        const constraints = {
+            video: {
+                width: { ideal: 640 },
+                height: { ideal: 480 },
+                deviceId: calendarSelectedDeviceId ? { exact: calendarSelectedDeviceId } : undefined,
+                facingMode: !calendarSelectedDeviceId ? 'environment' : undefined
+            }
+        };
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        calendarVideo.srcObject = stream;
+        await calendarVideo.play();
+        calendarStatusMessage.textContent = '📷 スキャン中...';
+        calendarAnimationFrameId = requestAnimationFrame(calendarScanLoop);
+    } catch (err) {
+        console.error('startCalendarScanning error:', err);
+        calendarStatusMessage.textContent = `❌ カメラの起動に失敗: ${err.message}`;
+        isCalendarScanning = false;
+        calendarScanBtn.disabled = false;
+        calendarStopBtn.disabled = true;
+    }
+}
+
+// カレンダー用スキャンループ
+function calendarScanLoop() {
+    if (!isCalendarScanning) return;
+
+    if (calendarVideo.readyState === calendarVideo.HAVE_ENOUGH_DATA) {
+        calendarCanvas.height = calendarVideo.videoHeight;
+        calendarCanvas.width = calendarVideo.videoWidth;
+        const ctx = calendarCanvas.getContext('2d', { willReadFrequently: true });
+        ctx.drawImage(calendarVideo, 0, 0, calendarCanvas.width, calendarCanvas.height);
+
+        // グレースケール変換
+        const imageData = ctx.getImageData(0, 0, calendarCanvas.width, calendarCanvas.height);
+        const data = imageData.data;
+        for (let i = 0; i < data.length; i += 4) {
+            const avg = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
+            data[i] = avg;
+            data[i + 1] = avg;
+            data[i + 2] = avg;
+        }
+        ctx.putImageData(imageData, 0, 0);
+
+        try {
+            const result = codeReader.decodeFromCanvas(canvas);
+            if (result) {
+                onDetected(result);
+            }
+        } catch (err) {
+            // エラーメッセージで判定する方法に変更
+            if (!(err instanceof ZXing.NotFoundException) &&
+                !err.message?.includes('No MultiFormat Readers were able to detect the code') &&
+                !err.message?.includes('NotFoundException')) {
+                console.error('Scan error:', err);
+            }
+            // バーコードが見つからないエラーは無視（正常動作）
+        }
+    }
+    calendarAnimationFrameId = requestAnimationFrame(calendarScanLoop);
+}
+
+// カレンダー用スキャン停止
+function stopCalendarScanning() {
+    if (calendarAnimationFrameId) {
+        cancelAnimationFrame(calendarAnimationFrameId);
+        calendarAnimationFrameId = null;
+    }
+    if (calendarVideo.srcObject) {
+        calendarVideo.srcObject.getTracks().forEach(track => track.stop());
+        calendarVideo.srcObject = null;
+    }
+    isCalendarScanning = false;
+    calendarStatusMessage.textContent = '📷 バーコードをスキャンして登録';
+    calendarScanBtn.disabled = false;
+    calendarStopBtn.disabled = true;
+}
+
+// イベントリスナー
+calendarScanBtn.addEventListener('click', startCalendarScanning);
+calendarStopBtn.addEventListener('click', stopCalendarScanning);
+
+// クリーンアップ
+window.addEventListener('beforeunload', () => {
+    if (isCalendarScanning) stopCalendarScanning();
+});
 
 initializeCalendar();
