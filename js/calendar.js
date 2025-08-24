@@ -142,14 +142,20 @@ function initializeCalendar() {
     // 特別なアイテムを追加
     addSpecialItemBtn.addEventListener('click', async () => {
         const name = specialItemNameInput.value.trim();
-        if (!name || !selectedDate) return;
+        const barcode = document.getElementById('special-item-barcode').value.trim();
 
-        const override = await getOverride(selectedDate) || { date: selectedDate, added: [], removed: [] };
-        override.added.push({ id: Date.now(), name: name, checked: false });
-        await saveOverride(override);
-        specialItemNameInput.value = '';
-        await renderDateSpecificChecklist(selectedDate);
-        await updateStats(); // ヘッダーの統計を更新
+        if (!name) {
+            showStatus('アイテム名を入力してください', 'warning');
+            specialItemNameInput.focus();
+            return;
+        }
+
+        if (!selectedDate) {
+            showStatus('日付を選択してください', 'warning');
+            return;
+        }
+
+        await processSpecialItemRegistration(barcode, name);
     });
 
     // アイテムの除外/復帰、特別なアイテムの削除
@@ -227,18 +233,87 @@ document.querySelectorAll('.calendar-scan-mode-btn').forEach(btn => {
 // 手動バーコード入力
 addSpecialBarcodeBtn.addEventListener('click', async () => {
     const barcode = specialItemBarcodeInput.value.trim();
-    if (!barcode || !selectedDate) return;
+    const itemName = document.getElementById('special-item-name').value.trim();
 
-    await addSpecialItemWithBarcode(barcode);
-    specialItemBarcodeInput.value = '';
+    if (!barcode) {
+        showStatus('バーコードを入力してください', 'warning');
+        specialItemBarcodeInput.focus();
+        return;
+    }
+
+    if (!itemName) {
+        showStatus('アイテム名を入力してください', 'warning');
+        document.getElementById('special-item-name').focus();
+        return;
+    }
+
+    await processSpecialItemRegistration(barcode, itemName);
 });
-
 // Enterキーでも登録可能に
 specialItemBarcodeInput.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') {
         addSpecialBarcodeBtn.click();
     }
 });
+
+document.getElementById('special-item-name').addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') {
+        const barcode = document.getElementById('special-item-barcode').value.trim();
+        if (barcode) {
+            addSpecialBarcodeBtn.click();
+        } else {
+            addSpecialItemBtn.click();
+        }
+    }
+});
+
+async function processSpecialItemRegistration(barcode, itemName) {
+    if (!selectedDate) {
+        showStatus('日付を選択してください', 'warning');
+        return false;
+    }
+
+    if (!itemName || !itemName.trim()) {
+        showStatus('アイテム名を入力してください', 'warning');
+        document.getElementById('special-item-name').focus();
+        return false;
+    }
+
+    const trimmedName = itemName.trim();
+    const override = await getOverride(selectedDate) || { date: selectedDate, added: [], removed: [] };
+
+    // 既に同じバーコードが追加されているかチェック
+    const alreadyAdded = override.added.find(item => item.code === barcode);
+    if (alreadyAdded) {
+        showStatus('このバーコードは既に追加されています', 'warning');
+        return false;
+    }
+
+    // 同じ名前のアイテムがないかチェック
+    const sameNameItem = override.added.find(item => item.name === trimmedName);
+    if (sameNameItem) {
+        showStatus('同じ名前のアイテムは既に追加されています', 'warning');
+        return false;
+    }
+
+    override.added.push({
+        id: Date.now(),
+        name: trimmedName,
+        code: barcode || '',
+        checked: false
+    });
+
+    await saveOverride(override);
+    await renderDateSpecificChecklist(selectedDate);
+    await updateStats();
+
+    // 入力フィールドをクリア
+    document.getElementById('special-item-name').value = '';
+    document.getElementById('special-item-barcode').value = '';
+
+    showStatus(`✅ 「${trimmedName}」を${selectedDate}に追加しました`, 'success');
+    return true;
+}
 
 // バーコード付き特別アイテムの追加
 async function addSpecialItemWithBarcode(barcode) {
@@ -247,44 +322,36 @@ async function addSpecialItemWithBarcode(barcode) {
         return;
     }
 
+    // バーコードを入力フィールドに設定
+    document.getElementById('special-item-barcode').value = barcode;
+
     // 既存アイテムに同じバーコードがあるかチェック
     const existingItem = items.find(i => i.code === barcode);
-    let itemName;
 
     if (existingItem) {
-        itemName = existingItem.name;
-        showStatus(`✅ 既存アイテム「${itemName}」をこの日に追加しました`, 'success');
+        // 既存アイテムの場合、名前を自動入力
+        document.getElementById('special-item-name').value = existingItem.name;
+        showStatus(`✅ 既存アイテム「${existingItem.name}」が入力されました`, 'success');
+        // 自動で登録を実行
+        await processSpecialItemRegistration(barcode, existingItem.name);
     } else {
-        // 新しいアイテム名を入力してもらう
-        itemName = prompt(`バーコード: ${barcode}\n\nアイテム名を入力してください:`);
-        if (!itemName || !itemName.trim()) {
-            showStatus('アイテム名が入力されませんでした', 'warning');
-            return;
-        }
-        itemName = itemName.trim();
+        // 新しいアイテムの場合、名前入力を促す
+        document.getElementById('special-item-name').value = '';
+        document.getElementById('special-item-name').focus();
+        showStatus('📝 アイテム名を入力して「追加」ボタンを押してください', 'info');
+
+        // 名前入力フィールドをハイライト
+        const nameInput = document.getElementById('special-item-name');
+        nameInput.style.borderColor = '#f59e0b';
+        nameInput.style.boxShadow = '0 0 0 3px rgba(245, 158, 11, 0.1)';
+
+        // フォーカスが外れたらハイライトを解除
+        nameInput.addEventListener('blur', function removeHighlight() {
+            nameInput.style.borderColor = '';
+            nameInput.style.boxShadow = '';
+            nameInput.removeEventListener('blur', removeHighlight);
+        }, { once: true });
     }
-
-    const override = await getOverride(selectedDate) || { date: selectedDate, added: [], removed: [] };
-
-    // 既に同じバーコードが追加されているかチェック
-    const alreadyAdded = override.added.find(item => item.code === barcode);
-    if (alreadyAdded) {
-        showStatus('このバーコードは既に追加されています', 'warning');
-        return;
-    }
-
-    override.added.push({
-        id: Date.now(),
-        name: itemName,
-        code: barcode,
-        checked: false
-    });
-
-    await saveOverride(override);
-    await renderDateSpecificChecklist(selectedDate);
-    await updateStats();
-
-    showStatus(`✅ 「${itemName}」を${selectedDate}に追加しました`, 'success');
 }
 
 // カレンダー用スキャン検出
