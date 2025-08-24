@@ -205,67 +205,42 @@ const calendarVideo = document.getElementById('calendar-video');
 const calendarCanvas = document.getElementById('calendar-canvas');
 const calendarStatusMessage = document.getElementById('calendar-status');
 const specialItemBarcodeInput = document.getElementById('special-item-barcode');
-const addSpecialBarcodeBtn = document.getElementById('add-special-barcode-btn');
 
-// スキャンモード切り替え
-document.querySelectorAll('.calendar-scan-mode-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-        const mode = btn.dataset.mode;
+// 🔥 削除：存在しない要素への参照を削除
+// const addSpecialBarcodeBtn = document.getElementById('add-special-barcode-btn');
 
-        // ボタンの状態更新
-        document.querySelectorAll('.calendar-scan-mode-btn').forEach(b => {
-            b.className = 'calendar-scan-mode-btn flex-1 py-2 px-3 text-sm font-medium transition-all duration-200 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600';
-        });
-        btn.className = 'calendar-scan-mode-btn flex-1 py-2 px-3 text-sm font-medium transition-all duration-200 bg-blue-600 text-white';
+// 🔥 削除：存在しないクラスへの処理を削除
+// document.querySelectorAll('.calendar-scan-mode-btn').forEach(btn => {
+//     // この部分は削除
+// });
 
-        // モード表示切り替え
-        if (mode === 'manual') {
-            document.getElementById('calendar-manual-mode').classList.remove('hidden');
-            document.getElementById('calendar-scan-mode').classList.add('hidden');
-            stopCalendarScanning();
-        } else {
-            document.getElementById('calendar-manual-mode').classList.add('hidden');
-            document.getElementById('calendar-scan-mode').classList.remove('hidden');
+// 🔥 削除：存在しない要素のイベントリスナー削除
+// addSpecialBarcodeBtn.addEventListener('click', async () => {
+//     // この部分は削除
+// });
+
+// Enterキーでの登録（修正版）
+if (specialItemBarcodeInput) {
+    specialItemBarcodeInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            // バーコード入力後はAddボタンをクリック
+            if (addSpecialItemBtn) {
+                addSpecialItemBtn.click();
+            }
         }
     });
-});
+}
 
-// 手動バーコード入力
-addSpecialBarcodeBtn.addEventListener('click', async () => {
-    const barcode = specialItemBarcodeInput.value.trim();
-    const itemName = document.getElementById('special-item-name').value.trim();
-
-    if (!barcode) {
-        showStatus('バーコードを入力してください', 'warning');
-        specialItemBarcodeInput.focus();
-        return;
-    }
-
-    if (!itemName) {
-        showStatus('アイテム名を入力してください', 'warning');
-        document.getElementById('special-item-name').focus();
-        return;
-    }
-
-    await processSpecialItemRegistration(barcode, itemName);
-});
-// Enterキーでも登録可能に
-specialItemBarcodeInput.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') {
-        addSpecialBarcodeBtn.click();
-    }
-});
-
-document.getElementById('special-item-name').addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') {
-        const barcode = document.getElementById('special-item-barcode').value.trim();
-        if (barcode) {
-            addSpecialBarcodeBtn.click();
-        } else {
-            addSpecialItemBtn.click();
+const specialItemNameInputElement = document.getElementById('special-item-name');
+if (specialItemNameInputElement) {
+    specialItemNameInputElement.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            if (addSpecialItemBtn) {
+                addSpecialItemBtn.click();
+            }
         }
-    }
-});
+    });
+}
 
 async function processSpecialItemRegistration(barcode, itemName) {
     if (!selectedDate) {
@@ -318,7 +293,7 @@ async function processSpecialItemRegistration(barcode, itemName) {
 // バーコード付き特別アイテムの追加
 async function addSpecialItemWithBarcode(barcode) {
     if (!selectedDate) {
-        showStatus('日付を選択してください', 'warning');
+        showStatus('📅 カレンダーから日付を選択してください', 'warning');
         return;
     }
 
@@ -340,17 +315,13 @@ async function addSpecialItemWithBarcode(barcode) {
         document.getElementById('special-item-name').focus();
         showStatus('📝 アイテム名を入力して「追加」ボタンを押してください', 'info');
 
-        // 名前入力フィールドをハイライト
-        const nameInput = document.getElementById('special-item-name');
-        nameInput.style.borderColor = '#f59e0b';
-        nameInput.style.boxShadow = '0 0 0 3px rgba(245, 158, 11, 0.1)';
-
-        // フォーカスが外れたらハイライトを解除
-        nameInput.addEventListener('blur', function removeHighlight() {
-            nameInput.style.borderColor = '';
-            nameInput.style.boxShadow = '';
-            nameInput.removeEventListener('blur', removeHighlight);
-        }, { once: true });
+        // 手動登録セクションまでスムーズスクロール
+        setTimeout(() => {
+            document.getElementById('special-item-name').scrollIntoView({
+                behavior: 'smooth',
+                block: 'center'
+            });
+        }, 100);
     }
 }
 
@@ -459,9 +430,14 @@ function stopCalendarScanning() {
     calendarStopBtn.disabled = true;
 }
 
-// イベントリスナー
-calendarScanBtn.addEventListener('click', startCalendarScanning);
-calendarStopBtn.addEventListener('click', stopCalendarScanning);
+// イベントリスナー（安全な登録）
+if (calendarScanBtn) {
+    calendarScanBtn.addEventListener('click', startCalendarScanning);
+}
+
+if (calendarStopBtn) {
+    calendarStopBtn.addEventListener('click', stopCalendarScanning);
+}
 
 // クリーンアップ
 window.addEventListener('beforeunload', () => {
