@@ -428,6 +428,7 @@ function calendarScanLoop() {
         try {
             const result = codeReader.decodeFromCanvas(canvas);
             if (result) {
+                alert("Detected: " + result.getText());
                 onCalendarDetected(result);
             }
         } catch (err) {
