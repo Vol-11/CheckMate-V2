@@ -718,11 +718,29 @@ async function startScanning() {
     statusMessage.textContent = '🎥 カメラを起動中...';
 
     try {
-        scanControls = await codeReader.decodeFromVideoDevice(selectedDeviceId, 'video', (result, err) => {
+ // 解像度制約を追加
+        const constraints = {
+            video: {
+                deviceId: selectedDeviceId,
+                width: { max: 640 },   // 幅を制限
+                height: { max: 460 },  // 高さを460pに制限
+                frameRate: { max: 30 }
+            }
+        };
+
+        // getUserMediaで先に制約付きストリームを取得
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        video.srcObject = stream;
+
+        // ZXingで既存のビデオ要素を使用
+        scanControls = await codeReader.decodeFromVideoElement('video', (result, err) => {
             if (result) {
-                console.log('startScanning: barcode detected', result);
+                console.log('barcode detected', result);
                 onDetected(result);
             }
+            // エラーハンドリングは既存のまま
+        });
+
             if (err) {
                 // バーコードが見つからない場合は正常な動作なので無視
                 if (err.message?.includes('No MultiFormat Readers') ||
