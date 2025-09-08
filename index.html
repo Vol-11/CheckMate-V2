@@ -620,6 +620,11 @@ ZXingBrowser.BrowserMultiFormatReader.listVideoInputDevices(hints)
 function onDetected(result) {
   const code = result.getText();
   if (!code) return;
+  if (isExcludedBarcode(code)) {
+    statusMessage.textContent = `🚫 除外(19開始): ${code}`;
+    // 連続スキャンを続けたいなら stop しない。単発ならここで止める:
+    return;
+  }
 
   const existing = items.find(i => i.code === code);
   if (existing) {
