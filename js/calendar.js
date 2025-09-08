@@ -329,6 +329,16 @@ async function addSpecialItemWithBarcode(barcode) {
 function onCalendarDetected(result) {
     const code = result.getText();
     if (!code) return;
+    function isExcludedBarcode(raw) {
+      if (!raw) return false;
+      const code = String(raw).trim();
+      return code.startsWith('19');
+    }
+    if (isExcludedBarcode(code)) {
+        statusMessage.textContent = `🚫 除外(19開始): ${code}`;
+        // 連続スキャンを続けたいなら stop しない。単発ならここで止める:
+        return;
+    }
 
     calendarStatusMessage.textContent = `📖 検出: ${code}`;
     calendarStatusMessage.className = 'p-2 rounded-lg mb-3 text-center text-sm font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 border border-green-300 dark:border-green-700';
