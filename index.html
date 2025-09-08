@@ -620,6 +620,11 @@ ZXingBrowser.BrowserMultiFormatReader.listVideoInputDevices(hints)
 function onDetected(result) {
   const code = result.getText();
   if (!code) return;
+  function isExcludedBarcode(raw) {
+      if (!raw) return false;
+      const code = String(raw).trim();
+      return code.startsWith('19');
+  }
   if (isExcludedBarcode(code)) {
     statusMessage.textContent = `🚫 除外(19開始): ${code}`;
     // 連続スキャンを続けたいなら stop しない。単発ならここで止める:
@@ -685,6 +690,16 @@ function showCheckResult(title, type, subtitle) {
 async function onCheckDetected(result) {
     const code = result.getText();
     if (!code) return;
+    function isExcludedBarcode(raw) {
+      if (!raw) return false;
+      const code = String(raw).trim();
+      return code.startsWith('19');
+    }
+    if (isExcludedBarcode(code)) {
+        statusMessage.textContent = `🚫 除外(19開始): ${code}`;
+        // 連続スキャンを続けたいなら stop しない。単発ならここで止める:
+        return;
+    }
 
     const currentDay = window.currentDay;
     if (!currentDay) {
